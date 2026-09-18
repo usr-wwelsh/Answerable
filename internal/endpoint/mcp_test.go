@@ -158,6 +158,109 @@ func TestMCPBookIntakeNotifiesWebhookWithLiveConfirmLinks(t *testing.T) {
 	}
 }
 
+func TestMCPBookIntakeOutputIncludesStatusToken(t *testing.T) {
+	store := openTestBookingStore(t)
+	srv := New(testProvider(), store, "")
+	session := connectMCP(t, srv)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "book_intake",
+		Arguments: map[string]any{
+			"name": "Jane Doe",
+			"need": "bed for two tonight",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool returned error: %v", err)
+	}
+
+	out, _ := json.Marshal(res.StructuredContent)
+	var parsed struct {
+		StatusToken string `json:"statusToken"`
+	}
+	json.Unmarshal(out, &parsed)
+	if parsed.StatusToken == "" {
+		t.Errorf("book_intake output missing statusToken: %s", out)
+	}
+}
+
+func TestMCPCheckIntakeStatusReflectsCurrentStatus(t *testing.T) {
+	store := openTestBookingStore(t)
+	srv := New(testProvider(), store, "")
+	session := connectMCP(t, srv)
+
+	bookRes, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "book_intake",
+		Arguments: map[string]any{
+			"name": "Jane Doe",
+			"need": "bed for two tonight",
+		},
+	})
+	if err != nil {
+		t.Fatalf("book_intake CallTool returned error: %v", err)
+	}
+	bookOut, _ := json.Marshal(bookRes.StructuredContent)
+	var booked struct {
+		StatusToken string `json:"statusToken"`
+	}
+	json.Unmarshal(bookOut, &booked)
+
+	statusRes, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "check_intake_status",
+		Arguments: map[string]any{"statusToken": booked.StatusToken},
+	})
+	if err != nil {
+		t.Fatalf("check_intake_status CallTool returned error: %v", err)
+	}
+	if statusRes.IsError {
+		t.Fatalf("check_intake_status reported an error: %+v", statusRes.Content)
+	}
+
+	statusOut, _ := json.Marshal(statusRes.StructuredContent)
+	var parsed struct {
+		Status string `json:"status"`
+	}
+	json.Unmarshal(statusOut, &parsed)
+	if parsed.Status != "pending" {
+		t.Errorf("status = %q, want pending", parsed.Status)
+	}
+
+	list, _ := store.List()
+	if _, err := store.Confirm(list[0].Token); err != nil {
+		t.Fatalf("Confirm returned error: %v", err)
+	}
+
+	statusRes2, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "check_intake_status",
+		Arguments: map[string]any{"statusToken": booked.StatusToken},
+	})
+	if err != nil {
+		t.Fatalf("check_intake_status CallTool returned error: %v", err)
+	}
+	statusOut2, _ := json.Marshal(statusRes2.StructuredContent)
+	json.Unmarshal(statusOut2, &parsed)
+	if parsed.Status != "confirmed" {
+		t.Errorf("status after confirm = %q, want confirmed", parsed.Status)
+	}
+}
+
+func TestMCPCheckIntakeStatusRejectsUnknownToken(t *testing.T) {
+	store := openTestBookingStore(t)
+	srv := New(testProvider(), store, "")
+	session := connectMCP(t, srv)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "check_intake_status",
+		Arguments: map[string]any{"statusToken": "bogus"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool returned protocol error: %v", err)
+	}
+	if !res.IsError {
+		t.Fatalf("expected a tool error for an unknown status token, got %+v", res)
+	}
+}
+
 func TestMCPBookIntakeRejectsMissingRequiredFields(t *testing.T) {
 	store := openTestBookingStore(t)
 	srv := New(testProvider(), store, "")

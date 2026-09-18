@@ -23,14 +23,15 @@ const (
 var nowFunc = time.Now
 
 type Request struct {
-	ID        string
-	Name      string
-	Contact   string
-	Need      string
-	Status    Status
-	Token     string
-	CreatedAt time.Time
-	ExpiresAt time.Time
+	ID          string
+	Name        string
+	Contact     string
+	Need        string
+	Status      Status
+	Token       string
+	StatusToken string
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
 }
 
 type Store struct {
@@ -60,7 +61,42 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 
+	if err := addColumnIfMissing(db, "booking_requests", "status_token", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	return &Store{db: db}, nil
+}
+
+// addColumnIfMissing lets Open handle a database created before a column
+// existed, by adding it in place instead of erroring on every query.
+// table/column/decl are always internal constants, never user input, so
+// building the DDL string is safe.
+func addColumnIfMissing(db *sql.DB, table, column, decl string) error {
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return err
+		}
+		if name == column {
+			return rows.Close()
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	_, err = db.Exec("ALTER TABLE " + table + " ADD COLUMN " + column + " " + decl)
+	return err
 }
 
 func (s *Store) Close() error {
@@ -92,23 +128,28 @@ func (s *Store) Enqueue(name, contact, need string) (Request, error) {
 	if err != nil {
 		return Request{}, err
 	}
+	statusToken, err := randomToken()
+	if err != nil {
+		return Request{}, err
+	}
 
 	now := nowFunc()
 	req := Request{
-		ID:        id,
-		Name:      name,
-		Contact:   contact,
-		Need:      need,
-		Status:    StatusPending,
-		Token:     token,
-		CreatedAt: now,
-		ExpiresAt: now.Add(tokenTTL),
+		ID:          id,
+		Name:        name,
+		Contact:     contact,
+		Need:        need,
+		Status:      StatusPending,
+		Token:       token,
+		StatusToken: statusToken,
+		CreatedAt:   now,
+		ExpiresAt:   now.Add(tokenTTL),
 	}
 
 	_, err = s.db.Exec(
-		`INSERT INTO booking_requests (id, name, contact, need, status, token, created_at, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		req.ID, req.Name, req.Contact, req.Need, string(req.Status), req.Token, req.CreatedAt, req.ExpiresAt,
+		`INSERT INTO booking_requests (id, name, contact, need, status, token, status_token, created_at, expires_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		req.ID, req.Name, req.Contact, req.Need, string(req.Status), req.Token, req.StatusToken, req.CreatedAt, req.ExpiresAt,
 	)
 	if err != nil {
 		return Request{}, err
@@ -119,14 +160,14 @@ func (s *Store) Enqueue(name, contact, need string) (Request, error) {
 
 func (s *Store) resolve(token string, next Status) (Request, error) {
 	row := s.db.QueryRow(
-		`SELECT id, name, contact, need, status, token, created_at, expires_at
+		`SELECT id, name, contact, need, status, token, status_token, created_at, expires_at
 		 FROM booking_requests WHERE token = ?`,
 		token,
 	)
 
 	var req Request
 	var status string
-	if err := row.Scan(&req.ID, &req.Name, &req.Contact, &req.Need, &status, &req.Token, &req.CreatedAt, &req.ExpiresAt); err != nil {
+	if err := row.Scan(&req.ID, &req.Name, &req.Contact, &req.Need, &status, &req.Token, &req.StatusToken, &req.CreatedAt, &req.ExpiresAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Request{}, errors.New("unknown token")
 		}
@@ -157,9 +198,38 @@ func (s *Store) Deny(token string) (Request, error) {
 	return s.resolve(token, StatusDenied)
 }
 
+// Status looks up a request by its status token — the read-only identifier
+// handed back to whoever submitted the request, distinct from the
+// confirm/deny Token so a requester can check in on their own request
+// without ever being able to resolve it. Unlike Confirm/Deny, this never
+// mutates state and can be called any number of times.
+func (s *Store) Status(statusToken string) (Request, error) {
+	if statusToken == "" {
+		return Request{}, errors.New("unknown status token")
+	}
+
+	row := s.db.QueryRow(
+		`SELECT id, name, contact, need, status, token, status_token, created_at, expires_at
+		 FROM booking_requests WHERE status_token = ?`,
+		statusToken,
+	)
+
+	var req Request
+	var status string
+	if err := row.Scan(&req.ID, &req.Name, &req.Contact, &req.Need, &status, &req.Token, &req.StatusToken, &req.CreatedAt, &req.ExpiresAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Request{}, errors.New("unknown status token")
+		}
+		return Request{}, err
+	}
+	req.Status = Status(status)
+
+	return req, nil
+}
+
 func (s *Store) List() ([]Request, error) {
 	rows, err := s.db.Query(
-		`SELECT id, name, contact, need, status, token, created_at, expires_at
+		`SELECT id, name, contact, need, status, token, status_token, created_at, expires_at
 		 FROM booking_requests ORDER BY created_at ASC`,
 	)
 	if err != nil {
@@ -171,7 +241,7 @@ func (s *Store) List() ([]Request, error) {
 	for rows.Next() {
 		var req Request
 		var status string
-		if err := rows.Scan(&req.ID, &req.Name, &req.Contact, &req.Need, &status, &req.Token, &req.CreatedAt, &req.ExpiresAt); err != nil {
+		if err := rows.Scan(&req.ID, &req.Name, &req.Contact, &req.Need, &status, &req.Token, &req.StatusToken, &req.CreatedAt, &req.ExpiresAt); err != nil {
 			return nil, err
 		}
 		req.Status = Status(status)

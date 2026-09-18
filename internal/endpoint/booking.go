@@ -79,7 +79,7 @@ func (s *Server) handleBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, message, err := s.bookIntake(baseURL(r), body.Name, body.Contact, body.Need)
+	req, message, err := s.bookIntake(baseURL(r), body.Name, body.Contact, body.Need)
 	if err != nil {
 		var verr *bookingValidationError
 		if errors.As(err, &verr) {
@@ -93,9 +93,27 @@ func (s *Server) handleBook(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{
-		"status":  "queued",
-		"message": message,
+		"status":      "queued",
+		"message":     message,
+		"statusToken": req.StatusToken,
 	})
+}
+
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		http.Error(w, "missing token", http.StatusBadRequest)
+		return
+	}
+
+	req, err := s.store.Status(token)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": string(req.Status)})
 }
 
 func (s *Server) handleConfirm(w http.ResponseWriter, r *http.Request) {

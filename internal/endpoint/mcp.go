@@ -20,8 +20,17 @@ type bookIntakeInput struct {
 }
 
 type bookIntakeOutput struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
+	Status      string `json:"status"`
+	Message     string `json:"message"`
+	StatusToken string `json:"statusToken"`
+}
+
+type checkIntakeStatusInput struct {
+	StatusToken string `json:"statusToken" jsonschema:"the statusToken returned by book_intake"`
+}
+
+type checkIntakeStatusOutput struct {
+	Status string `json:"status"`
 }
 
 func (s *Server) newMCPServer(baseURL string) *mcp.Server {
@@ -41,9 +50,9 @@ func (s *Server) newMCPServer(baseURL string) *mcp.Server {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "book_intake",
-		Description: "Submit an intake request to this provider for a person or people in need. This queues a request for human review — it does not instantly reserve anything.",
+		Description: "Submit an intake request to this provider for a person or people in need. This queues a request for human review — it does not instantly reserve anything. The response includes a statusToken; use check_intake_status with it later to see whether the request was confirmed or denied, instead of re-submitting.",
 	}, func(_ context.Context, _ *mcp.CallToolRequest, in bookIntakeInput) (*mcp.CallToolResult, bookIntakeOutput, error) {
-		_, message, err := s.bookIntake(baseURL, in.Name, in.Contact, in.Need)
+		req, message, err := s.bookIntake(baseURL, in.Name, in.Contact, in.Need)
 		if err != nil {
 			var verr *bookingValidationError
 			if errors.As(err, &verr) {
@@ -51,7 +60,18 @@ func (s *Server) newMCPServer(baseURL string) *mcp.Server {
 			}
 			return nil, bookIntakeOutput{}, errors.New("failed to queue request")
 		}
-		return nil, bookIntakeOutput{Status: "queued", Message: message}, nil
+		return nil, bookIntakeOutput{Status: "queued", Message: message, StatusToken: req.StatusToken}, nil
+	})
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "check_intake_status",
+		Description: "Check whether a previously submitted intake request (from book_intake) has been confirmed or denied yet, using the statusToken it returned. Read-only — safe to call repeatedly.",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, in checkIntakeStatusInput) (*mcp.CallToolResult, checkIntakeStatusOutput, error) {
+		req, err := s.store.Status(in.StatusToken)
+		if err != nil {
+			return nil, checkIntakeStatusOutput{}, err
+		}
+		return nil, checkIntakeStatusOutput{Status: string(req.Status)}, nil
 	})
 
 	return srv

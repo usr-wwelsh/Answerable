@@ -51,6 +51,9 @@ func TestBookWithoutWebhookQueuesRequestAndOmitsJargon(t *testing.T) {
 	if _, leaked := resp["confirmUrl"]; leaked {
 		t.Error("response leaks confirmUrl to the requester — only the webhook should see it")
 	}
+	if resp["statusToken"] == "" {
+		t.Error("response should include a statusToken so the requester can check back later")
+	}
 
 	list, err := store.List()
 	if err != nil {
@@ -58,6 +61,9 @@ func TestBookWithoutWebhookQueuesRequestAndOmitsJargon(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].Name != "Jane Doe" {
 		t.Errorf("expected queued request for Jane Doe, got %+v", list)
+	}
+	if resp["statusToken"] != list[0].StatusToken {
+		t.Errorf("returned statusToken %q does not match the stored request's %q", resp["statusToken"], list[0].StatusToken)
 	}
 }
 
@@ -124,6 +130,71 @@ func TestConfirmAndDenyRoutesResolveTokens(t *testing.T) {
 	list, _ = store.List()
 	if list[0].Status != booking.StatusConfirmed {
 		t.Errorf("status = %q, want confirmed", list[0].Status)
+	}
+}
+
+func TestStatusRouteReflectsPendingThenConfirmed(t *testing.T) {
+	store := openTestBookingStore(t)
+	srv := New(testProvider(), store, "")
+
+	rec := postBook(t, srv, `{"name":"Jane Doe","contact":"555-0100","need":"bed for two tonight"}`)
+	var resp map[string]string
+	json.Unmarshal(rec.Body.Bytes(), &resp)
+	statusToken := resp["statusToken"]
+
+	statusReq := httptest.NewRequest(http.MethodGet, "/status?token="+statusToken, nil)
+	statusRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(statusRec, statusReq)
+
+	if statusRec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", statusRec.Code, statusRec.Body.String())
+	}
+	var statusResp map[string]string
+	json.Unmarshal(statusRec.Body.Bytes(), &statusResp)
+	if statusResp["status"] != "pending" {
+		t.Errorf("status = %q, want pending", statusResp["status"])
+	}
+
+	list, _ := store.List()
+	if _, err := store.Confirm(list[0].Token); err != nil {
+		t.Fatalf("Confirm returned error: %v", err)
+	}
+
+	statusRec2 := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(statusRec2, httptest.NewRequest(http.MethodGet, "/status?token="+statusToken, nil))
+	json.Unmarshal(statusRec2.Body.Bytes(), &statusResp)
+	if statusResp["status"] != "confirmed" {
+		t.Errorf("status after confirm = %q, want confirmed", statusResp["status"])
+	}
+}
+
+func TestStatusRouteCannotResolveTheRequestItself(t *testing.T) {
+	store := openTestBookingStore(t)
+	srv := New(testProvider(), store, "")
+
+	rec := postBook(t, srv, `{"name":"Jane Doe","contact":"555-0100","need":"bed for two tonight"}`)
+	var resp map[string]string
+	json.Unmarshal(rec.Body.Bytes(), &resp)
+
+	req := httptest.NewRequest(http.MethodGet, "/confirm?token="+resp["statusToken"], nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code == http.StatusOK {
+		t.Error("the status token must not be usable to confirm the request")
+	}
+}
+
+func TestStatusRouteRejectsUnknownToken(t *testing.T) {
+	store := openTestBookingStore(t)
+	srv := New(testProvider(), store, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/status?token=bogus", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 }
 
