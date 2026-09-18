@@ -53,7 +53,46 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 
+	if err := addColumnIfMissing(db, "provider_config", "source_label", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := addColumnIfMissing(db, "provider_config", "source_updated_at_unix", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	return &Store{db: db}, nil
+}
+
+// addColumnIfMissing lets Store.Open handle a database created before a
+// column existed, by adding it in place instead of erroring on every
+// Save/Load. table/column/decl are always internal constants, never
+// user input, so building the DDL string is safe.
+func addColumnIfMissing(db *sql.DB, table, column, decl string) error {
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return err
+		}
+		if name == column {
+			return rows.Close()
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	_, err = db.Exec("ALTER TABLE " + table + " ADD COLUMN " + column + " " + decl)
+	return err
 }
 
 func (s *Store) Close() error {

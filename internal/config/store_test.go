@@ -1,8 +1,11 @@
 package config
 
 import (
+	"database/sql"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestLoadOnEmptyStoreReportsNotFound(t *testing.T) {
@@ -83,6 +86,59 @@ func TestSaveWithZeroUpdatedAtRoundTripsAsZero(t *testing.T) {
 	}
 	if !got.SourceUpdatedAt.IsZero() {
 		t.Errorf("SourceUpdatedAt = %v, want zero", got.SourceUpdatedAt)
+	}
+}
+
+func TestOpenMigratesPreExistingSchemaMissingNewColumns(t *testing.T) {
+	path := t.TempDir() + "/answerable.db"
+
+	legacy, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	_, err = legacy.Exec(`
+		CREATE TABLE provider_config (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			source_kind TEXT NOT NULL,
+			source_value TEXT NOT NULL,
+			refresh_interval_seconds INTEGER NOT NULL,
+			webhook_url TEXT NOT NULL
+		)
+	`)
+	if err != nil {
+		t.Fatalf("create legacy table: %v", err)
+	}
+	_, err = legacy.Exec(
+		`INSERT INTO provider_config (id, source_kind, source_value, refresh_interval_seconds, webhook_url) VALUES (1, ?, ?, ?, ?)`,
+		"file", "/data/old.csv", 0, "",
+	)
+	if err != nil {
+		t.Fatalf("seed legacy row: %v", err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatalf("close legacy db: %v", err)
+	}
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open on legacy schema: %v", err)
+	}
+	defer s.Close()
+
+	got, ok, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load on legacy schema: %v", err)
+	}
+	if !ok || got.Source.Value != "/data/old.csv" {
+		t.Fatalf("Load = %+v, ok=%v, want the pre-existing row", got, ok)
+	}
+
+	if err := s.Save(Config{
+		Source:          Source{Kind: SourceFile, Value: "/data/new.csv"},
+		SourceLabel:     "new.csv",
+		SourceUpdatedAt: time.Now(),
+	}); err != nil {
+		t.Fatalf("Save after migration: %v", err)
 	}
 }
 
