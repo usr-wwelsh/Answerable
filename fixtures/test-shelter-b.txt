@@ -1,0 +1,8 @@
+Test Shelter B is a low-barrier overnight shelter serving the downtown core.
+Beds fill up fast, so please only request one if it's needed tonight.
+
+Name: Test Shelter B
+Capacity Total: 25
+Capacity Available: 3
+Eligibility: referral required
+Hours: 8pm-7am
