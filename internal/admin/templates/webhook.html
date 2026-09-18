@@ -1,0 +1,24 @@
+{{define "webhook"}}
+<div class="card">
+  <h1>Where should new requests go?</h1>
+  <p class="lede">
+    When someone submits a request, we can ping a channel you already check —
+    Slack, Discord, or Microsoft Teams — with a one-click link to confirm or
+    turn it down. No account or password needed.
+  </p>
+
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+
+  <form method="post" action="/onboarding/webhook" class="stack">
+    <label for="webhook_url">Paste your Slack, Discord, or Teams "incoming webhook" link here</label>
+    <input type="url" id="webhook_url" name="webhook_url" placeholder="https://discord.com/api/webhooks/..." value="{{.WebhookURL}}">
+    <p class="hint">Your chat tool calls this an "incoming webhook" — it's a link you create in the channel's settings.</p>
+    <div class="actions">
+      <button type="submit" class="button">Save and finish</button>
+      <button type="submit" form="skip-form" class="button secondary">Skip for now</button>
+    </div>
+  </form>
+  <form id="skip-form" method="post" action="/onboarding/webhook/skip"></form>
+  <p class="hint">You can always add this later — requests are saved either way, and you'll see them next time you open this page.</p>
+</div>
+{{end}}

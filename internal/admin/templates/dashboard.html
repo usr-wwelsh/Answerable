@@ -1,0 +1,48 @@
+{{define "dashboard"}}
+<div class="stack-lg">
+  <h1>{{.ProviderName}}</h1>
+
+  {{if .LastError}}
+  <div class="card banner-error">
+    <p>We couldn't refresh your information: {{.LastError}}</p>
+    <p class="hint">Your last known-good information is still live. Nothing was taken down.</p>
+  </div>
+  {{end}}
+
+  <div class="card">
+    <h2>What's being shared</h2>
+    <table class="kv">
+      {{range .Properties}}
+      <tr><th>{{.Key}}</th><td>{{.Value}}</td></tr>
+      {{end}}
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Your information source</h2>
+    {{if eq .SourceKind "url"}}
+      <p>A live link, checked {{if .RefreshMinutes}}every {{.RefreshMinutes}} minutes{{else}}only when you click refresh{{end}}.</p>
+      <form method="post" action="/refresh" class="inline"><button type="submit" class="button secondary">Refresh now</button></form>
+    {{else}}
+      <p>A file you uploaded.</p>
+    {{end}}
+    <p><a href="/onboarding/source">Change this</a></p>
+  </div>
+
+  <div class="card">
+    <h2>New request notifications</h2>
+    {{if .WebhookConfigured}}
+      <p>Connected — new requests will ping your chat channel.</p>
+    {{else}}
+      <p>Not connected yet. New requests are still saved below, but nothing will notify you.</p>
+    {{end}}
+    <p><a href="/onboarding/webhook">Change this</a></p>
+  </div>
+
+  <div class="card">
+    <h2>Requests</h2>
+    <p>{{.QueueCount}} request{{if ne .QueueCount 1}}s{{end}} saved so far.</p>
+    <p><a href="/queue">View requests</a></p>
+  </div>
+</div>
+{{end}}

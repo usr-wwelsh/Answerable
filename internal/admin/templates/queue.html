@@ -1,0 +1,22 @@
+{{define "queue"}}
+<div class="stack-lg">
+  <h1>Requests</h1>
+  <p><a href="/">&larr; Back</a></p>
+  {{if not .Requests}}
+    <p>No requests yet.</p>
+  {{else}}
+  <table class="queue">
+    <tr><th>Status</th><th>Name</th><th>Contact</th><th>Need</th><th>Received</th></tr>
+    {{range .Requests}}
+    <tr class="status-{{.Status}}">
+      <td>{{.Status}}</td>
+      <td>{{.Name}}</td>
+      <td>{{.Contact}}</td>
+      <td>{{.Need}}</td>
+      <td>{{.CreatedAt.Format "Jan 2 15:04"}}</td>
+    </tr>
+    {{end}}
+  </table>
+  {{end}}
+</div>
+{{end}}

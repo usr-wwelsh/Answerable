@@ -1,0 +1,38 @@
+{{define "source"}}
+<div class="card">
+  <h1>Where's your information?</h1>
+  <p class="lede">Drop in a file, or paste a link that's already kept up to date. Either one works — pick whichever is easier.</p>
+
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+
+  <form method="post" action="/onboarding/source" enctype="multipart/form-data" class="stack">
+    <fieldset>
+      <legend>Option A — drop in a file</legend>
+      <label for="file">Spreadsheet, document, or plain text</label>
+      <input type="file" id="file" name="file" accept=".csv,.md,.txt,.pdf">
+      <p class="hint">Works with: a CSV export from a spreadsheet, a plain text or Markdown file, or a PDF.</p>
+    </fieldset>
+
+    <p class="or">— or —</p>
+
+    <fieldset>
+      <legend>Option B — paste a link that stays live</legend>
+      <label for="url">Link to your information</label>
+      <input type="url" id="url" name="url" placeholder="https://docs.google.com/spreadsheets/d/.../export?format=csv" value="{{.URL}}">
+      <p class="hint">
+        Works with a Google Sheet published to the web as CSV, or a Google Doc
+        published as plain text (File &rarr; Share &rarr; Publish to web).
+      </p>
+      <label for="refresh_minutes">Check for updates every</label>
+      <select id="refresh_minutes" name="refresh_minutes">
+        <option value="0" {{if eq .RefreshMinutes "0"}}selected{{end}}>Only when I click refresh</option>
+        <option value="5" {{if eq .RefreshMinutes "5"}}selected{{end}}>5 minutes</option>
+        <option value="15" {{if eq .RefreshMinutes "15"}}selected{{end}}>15 minutes</option>
+        <option value="60" {{if eq .RefreshMinutes "60"}}selected{{end}}>1 hour</option>
+      </select>
+    </fieldset>
+
+    <button type="submit" class="button">Continue</button>
+  </form>
+</div>
+{{end}}
