@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -73,4 +74,38 @@ func DetectFormat(raw, contentType string) Format {
 	}
 
 	return ""
+}
+
+var googleSheetsPath = regexp.MustCompile(`^/spreadsheets/d/([a-zA-Z0-9_-]+)(?:/edit)?/?$`)
+
+// NormalizeSourceURL rewrites a Google Sheets "share" or "edit" link (the
+// kind Google's UI hands you: .../spreadsheets/d/<id>/edit?usp=sharing) into
+// its CSV export link, so onboarding accepts the URL users actually copy out
+// of Sheets and periodic refresh keeps pulling the live sheet. Links that
+// already point at a specific export/gviz endpoint, or aren't Google Sheets
+// links at all, are returned unchanged.
+func NormalizeSourceURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host != "docs.google.com" {
+		return raw
+	}
+
+	m := googleSheetsPath.FindStringSubmatch(u.Path)
+	if m == nil {
+		return raw
+	}
+	id := m[1]
+
+	gid := u.Query().Get("gid")
+	if gid == "" {
+		if frag, err := url.ParseQuery(u.Fragment); err == nil {
+			gid = frag.Get("gid")
+		}
+	}
+
+	out := fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/export?format=csv", id)
+	if gid != "" {
+		out += "&gid=" + gid
+	}
+	return out
 }

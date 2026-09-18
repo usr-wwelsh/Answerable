@@ -115,11 +115,12 @@ func (s *Server) handleSource(w http.ResponseWriter, r *http.Request) {
 		newSrc = config.Source{Kind: config.SourceFile, Value: savedPath}
 		sourceLabel = fileHeader.Filename
 	} else {
-		if err := ingest.ValidateURL(urlVal); err != nil {
+		normalizedURL := ingest.NormalizeSourceURL(urlVal)
+		if err := ingest.ValidateURL(normalizedURL); err != nil {
 			s.renderSourceForm(w, http.StatusBadRequest, sourceData{Error: "That doesn't look like a web link (needs to start with http:// or https://).", URL: urlVal, RefreshMinutes: refreshRaw})
 			return
 		}
-		rec, err := s.fetcher.Fetch(urlVal)
+		rec, err := s.fetcher.Fetch(normalizedURL)
 		if err != nil {
 			s.renderSourceForm(w, http.StatusBadRequest, sourceData{Error: "Couldn't read that link: " + friendlyParseError(err), URL: urlVal, RefreshMinutes: refreshRaw})
 			return
@@ -134,7 +135,7 @@ func (s *Server) handleSource(w http.ResponseWriter, r *http.Request) {
 		if err != nil || minutes < 0 {
 			minutes = 0
 		}
-		newSrc = config.Source{Kind: config.SourceURL, Value: urlVal}
+		newSrc = config.Source{Kind: config.SourceURL, Value: normalizedURL}
 		interval = time.Duration(minutes) * time.Minute
 		sourceLabel = urlVal
 	}

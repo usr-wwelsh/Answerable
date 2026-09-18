@@ -74,3 +74,43 @@ func TestDetectFormatUnknownReturnsEmpty(t *testing.T) {
 		t.Errorf("DetectFormat = %q, want empty", got)
 	}
 }
+
+func TestNormalizeSourceURLRewritesGoogleSheetsEditLink(t *testing.T) {
+	cases := map[string]string{
+		"https://docs.google.com/spreadsheets/d/1zP_rbjm1eIZAdSd8a7dksWpWfrBCCoOU72YD0eEs9cc/edit?usp=sharing": "https://docs.google.com/spreadsheets/d/1zP_rbjm1eIZAdSd8a7dksWpWfrBCCoOU72YD0eEs9cc/export?format=csv",
+		"https://docs.google.com/spreadsheets/d/abc123/edit":                                                   "https://docs.google.com/spreadsheets/d/abc123/export?format=csv",
+		"https://docs.google.com/spreadsheets/d/abc123":                                                        "https://docs.google.com/spreadsheets/d/abc123/export?format=csv",
+	}
+	for in, want := range cases {
+		if got := NormalizeSourceURL(in); got != want {
+			t.Errorf("NormalizeSourceURL(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestNormalizeSourceURLPreservesSheetTabViaGID(t *testing.T) {
+	cases := map[string]string{
+		"https://docs.google.com/spreadsheets/d/abc123/edit#gid=98765":             "https://docs.google.com/spreadsheets/d/abc123/export?format=csv&gid=98765",
+		"https://docs.google.com/spreadsheets/d/abc123/edit?usp=sharing#gid=98765": "https://docs.google.com/spreadsheets/d/abc123/export?format=csv&gid=98765",
+		"https://docs.google.com/spreadsheets/d/abc123/edit?gid=98765&usp=sharing": "https://docs.google.com/spreadsheets/d/abc123/export?format=csv&gid=98765",
+	}
+	for in, want := range cases {
+		if got := NormalizeSourceURL(in); got != want {
+			t.Errorf("NormalizeSourceURL(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestNormalizeSourceURLLeavesNonSheetsURLsUnchanged(t *testing.T) {
+	for _, u := range []string{
+		"https://docs.google.com/spreadsheets/d/abc123/export?format=csv",
+		"https://docs.google.com/spreadsheets/d/abc123/gviz/tq?output=csv",
+		"https://docs.google.com/document/d/abc123/edit",
+		"https://example.com/data.csv",
+		"not a url at all",
+	} {
+		if got := NormalizeSourceURL(u); got != u {
+			t.Errorf("NormalizeSourceURL(%q) = %q, want unchanged", u, got)
+		}
+	}
+}
