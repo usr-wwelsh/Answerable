@@ -5,7 +5,7 @@ import (
 	"io/fs"
 )
 
-//go:embed static/style.css static/logo.svg static/favicon.svg static/fonts/*.woff2
+//go:embed static/style.css static/app.js static/logo.svg static/favicon.svg static/fonts/*.woff2
 var staticFS embed.FS
 
 func staticFileSystem() fs.FS {

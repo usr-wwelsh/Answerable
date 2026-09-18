@@ -3,10 +3,12 @@ package admin
 import (
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/usr-wwelsh/answerable/internal/booking"
 	"github.com/usr-wwelsh/answerable/internal/config"
@@ -14,6 +16,8 @@ import (
 	"github.com/usr-wwelsh/answerable/internal/ingest"
 	"github.com/usr-wwelsh/answerable/internal/parser"
 )
+
+var nowFunc = time.Now
 
 type Deps struct {
 	ConfigStore  *config.Store
@@ -144,7 +148,13 @@ func (s *Server) refreshFromSource() {
 	s.mu.Lock()
 	s.provider = p
 	s.lastErr = nil
+	s.cfg.SourceUpdatedAt = nowFunc()
+	cfgCopy := s.cfg
 	s.mu.Unlock()
+
+	if err := s.cfgStore.Save(cfgCopy); err != nil {
+		log.Printf("failed to persist refreshed source timestamp: %v", err)
+	}
 
 	if s.onProvider != nil {
 		s.onProvider(p)

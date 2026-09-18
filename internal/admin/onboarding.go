@@ -76,9 +76,10 @@ func (s *Server) handleSource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		provider facts.Provider
-		newSrc   config.Source
-		interval time.Duration
+		provider    facts.Provider
+		newSrc      config.Source
+		interval    time.Duration
+		sourceLabel string
 	)
 
 	if fileHeader != nil {
@@ -112,6 +113,7 @@ func (s *Server) handleSource(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		newSrc = config.Source{Kind: config.SourceFile, Value: savedPath}
+		sourceLabel = fileHeader.Filename
 	} else {
 		if err := ingest.ValidateURL(urlVal); err != nil {
 			s.renderSourceForm(w, http.StatusBadRequest, sourceData{Error: "That doesn't look like a web link (needs to start with http:// or https://).", URL: urlVal, RefreshMinutes: refreshRaw})
@@ -134,11 +136,14 @@ func (s *Server) handleSource(w http.ResponseWriter, r *http.Request) {
 		}
 		newSrc = config.Source{Kind: config.SourceURL, Value: urlVal}
 		interval = time.Duration(minutes) * time.Minute
+		sourceLabel = urlVal
 	}
 
 	s.mu.Lock()
 	s.cfg.Source = newSrc
 	s.cfg.RefreshInterval = interval
+	s.cfg.SourceLabel = sourceLabel
+	s.cfg.SourceUpdatedAt = nowFunc()
 	cfgCopy := s.cfg
 	s.provider = provider
 	s.lastErr = nil

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/usr-wwelsh/answerable/internal/booking"
 	"github.com/usr-wwelsh/answerable/internal/config"
@@ -230,6 +231,64 @@ func TestDashboardShowsProviderOnceConfigured(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "Test Shelter") {
 		t.Errorf("dashboard missing provider name: %s", rec.Body.String())
+	}
+}
+
+func TestDashboardShowsUploadedFilenameAndTimestamp(t *testing.T) {
+	h := newHarness(t)
+	body, ct := multipartUpload(t, "file", "shelter-hours.csv", []byte("name,beds\nTest Shelter,12\n"), nil)
+	h.do(t, http.MethodPost, "/onboarding/source", body, ct)
+
+	cfg, ok, err := h.cfgStore.Load()
+	if err != nil || !ok {
+		t.Fatalf("Load: ok=%v err=%v", ok, err)
+	}
+	if cfg.SourceLabel != "shelter-hours.csv" {
+		t.Errorf("SourceLabel = %q, want shelter-hours.csv", cfg.SourceLabel)
+	}
+	if cfg.SourceUpdatedAt.IsZero() {
+		t.Error("SourceUpdatedAt is zero, want it set on upload")
+	}
+
+	rec := h.do(t, http.MethodGet, "/", nil, "")
+	body2 := rec.Body.String()
+	if !strings.Contains(body2, "shelter-hours.csv") {
+		t.Errorf("dashboard missing uploaded filename: %s", body2)
+	}
+	if !strings.Contains(body2, "data-ts=") {
+		t.Errorf("dashboard missing machine-readable timestamp for client-side timezone rendering: %s", body2)
+	}
+}
+
+func TestRefreshUpdatesSourceTimestamp(t *testing.T) {
+	calls := 0
+	hookSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "text/csv")
+		w.Write([]byte("name,beds\nRemote Shelter,7\n"))
+	}))
+	defer hookSrv.Close()
+
+	t0 := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	restore := nowFunc
+	nowFunc = func() time.Time { return t0 }
+	defer func() { nowFunc = restore }()
+
+	h := newHarness(t)
+	body, ct := multipartUpload(t, "file", "", nil, map[string]string{"url": hookSrv.URL + "/sheet.csv"})
+	h.do(t, http.MethodPost, "/onboarding/source", body, ct)
+
+	firstCfg, _, _ := h.cfgStore.Load()
+
+	nowFunc = func() time.Time { return t0.Add(time.Hour) }
+	h.do(t, http.MethodPost, "/refresh", nil, "")
+
+	secondCfg, _, _ := h.cfgStore.Load()
+	if !secondCfg.SourceUpdatedAt.After(firstCfg.SourceUpdatedAt) {
+		t.Errorf("SourceUpdatedAt did not advance after refresh: first=%v second=%v", firstCfg.SourceUpdatedAt, secondCfg.SourceUpdatedAt)
+	}
+	if calls < 2 {
+		t.Errorf("expected at least 2 fetches (initial + refresh), got %d", calls)
 	}
 }
 

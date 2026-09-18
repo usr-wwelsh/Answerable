@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/usr-wwelsh/answerable/internal/admin"
 	"github.com/usr-wwelsh/answerable/internal/booking"
@@ -106,8 +107,10 @@ func seedIfUnconfigured(store *config.Store, file, webhookURL string) {
 	}
 
 	err = store.Save(config.Config{
-		Source:     config.Source{Kind: config.SourceFile, Value: abs},
-		WebhookURL: webhookURL,
+		Source:          config.Source{Kind: config.SourceFile, Value: abs},
+		WebhookURL:      webhookURL,
+		SourceLabel:     filepath.Base(file),
+		SourceUpdatedAt: time.Now(),
 	})
 	if err != nil {
 		log.Printf("warning: could not save pre-seeded config: %v", err)

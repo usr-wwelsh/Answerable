@@ -23,6 +23,8 @@ type Config struct {
 	Source          Source
 	RefreshInterval time.Duration
 	WebhookURL      string
+	SourceLabel     string
+	SourceUpdatedAt time.Time
 }
 
 type Store struct {
@@ -41,7 +43,9 @@ func Open(path string) (*Store, error) {
 			source_kind TEXT NOT NULL,
 			source_value TEXT NOT NULL,
 			refresh_interval_seconds INTEGER NOT NULL,
-			webhook_url TEXT NOT NULL
+			webhook_url TEXT NOT NULL,
+			source_label TEXT NOT NULL DEFAULT '',
+			source_updated_at_unix INTEGER NOT NULL DEFAULT 0
 		)
 	`)
 	if err != nil {
@@ -58,13 +62,13 @@ func (s *Store) Close() error {
 
 func (s *Store) Load() (Config, bool, error) {
 	row := s.db.QueryRow(`
-		SELECT source_kind, source_value, refresh_interval_seconds, webhook_url
+		SELECT source_kind, source_value, refresh_interval_seconds, webhook_url, source_label, source_updated_at_unix
 		FROM provider_config WHERE id = 1
 	`)
 
-	var kind, value, webhookURL string
-	var seconds int64
-	if err := row.Scan(&kind, &value, &seconds, &webhookURL); err != nil {
+	var kind, value, webhookURL, label string
+	var seconds, updatedAtUnix int64
+	if err := row.Scan(&kind, &value, &seconds, &webhookURL, &label, &updatedAtUnix); err != nil {
 		if err == sql.ErrNoRows {
 			return Config{}, false, nil
 		}
@@ -75,22 +79,41 @@ func (s *Store) Load() (Config, bool, error) {
 		Source:          Source{Kind: SourceKind(kind), Value: value},
 		RefreshInterval: time.Duration(seconds) * time.Second,
 		WebhookURL:      webhookURL,
+		SourceLabel:     label,
+		SourceUpdatedAt: unixToTime(updatedAtUnix),
 	}
 	return cfg, true, nil
 }
 
 func (s *Store) Save(cfg Config) error {
 	_, err := s.db.Exec(`
-		INSERT INTO provider_config (id, source_kind, source_value, refresh_interval_seconds, webhook_url)
-		VALUES (1, ?, ?, ?, ?)
+		INSERT INTO provider_config (id, source_kind, source_value, refresh_interval_seconds, webhook_url, source_label, source_updated_at_unix)
+		VALUES (1, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			source_kind = excluded.source_kind,
 			source_value = excluded.source_value,
 			refresh_interval_seconds = excluded.refresh_interval_seconds,
-			webhook_url = excluded.webhook_url
+			webhook_url = excluded.webhook_url,
+			source_label = excluded.source_label,
+			source_updated_at_unix = excluded.source_updated_at_unix
 	`,
 		string(cfg.Source.Kind), cfg.Source.Value,
 		int64(cfg.RefreshInterval/time.Second), cfg.WebhookURL,
+		cfg.SourceLabel, timeToUnix(cfg.SourceUpdatedAt),
 	)
 	return err
+}
+
+func timeToUnix(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
+}
+
+func unixToTime(sec int64) time.Time {
+	if sec == 0 {
+		return time.Time{}
+	}
+	return time.Unix(sec, 0).UTC()
 }

@@ -21,10 +21,15 @@
   <div class="card">
     <h2>Your information source</h2>
     {{if eq .SourceKind "url"}}
-      <p>A live link, checked {{if .RefreshMinutes}}every {{.RefreshMinutes}} minutes{{else}}only when you click refresh{{end}}.</p>
+      <p>
+        A live link, checked {{if .RefreshMinutes}}every {{.RefreshMinutes}} minutes{{else}}only when you click refresh{{end}}.
+        {{if .SourceUpdatedAtISO}}Last checked <time data-ts="{{.SourceUpdatedAtISO}}">{{.SourceUpdatedAtText}}</time>.{{end}}
+      </p>
       <form method="post" action="/refresh" class="inline"><button type="submit" class="button secondary">Refresh now</button></form>
     {{else}}
-      <p>A file you uploaded.</p>
+      <p>
+        You uploaded <strong>{{.SourceLabel}}</strong>{{if .SourceUpdatedAtISO}} on <time data-ts="{{.SourceUpdatedAtISO}}">{{.SourceUpdatedAtText}}</time>{{end}}.
+      </p>
     {{end}}
     <p><a href="/onboarding/source">Change this</a></p>
   </div>

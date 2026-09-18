@@ -3,6 +3,7 @@ package admin
 import (
 	"net/http"
 	"sort"
+	"time"
 )
 
 type kv struct {
@@ -11,13 +12,16 @@ type kv struct {
 }
 
 type dashboardData struct {
-	ProviderName      string
-	Properties        []kv
-	SourceKind        string
-	RefreshMinutes    int
-	WebhookConfigured bool
-	QueueCount        int
-	LastError         string
+	ProviderName        string
+	Properties          []kv
+	SourceKind          string
+	SourceLabel         string
+	SourceUpdatedAtISO  string
+	SourceUpdatedAtText string
+	RefreshMinutes      int
+	WebhookConfigured   bool
+	QueueCount          int
+	LastError           string
 }
 
 func (s *Server) renderDashboard(w http.ResponseWriter, r *http.Request) {
@@ -48,14 +52,23 @@ func (s *Server) renderDashboard(w http.ResponseWriter, r *http.Request) {
 		errMsg = lastErr.Error()
 	}
 
+	updatedISO, updatedText := "", ""
+	if !cfg.SourceUpdatedAt.IsZero() {
+		updatedISO = cfg.SourceUpdatedAt.UTC().Format(time.RFC3339)
+		updatedText = cfg.SourceUpdatedAt.UTC().Format("Jan 2, 2006 15:04 UTC")
+	}
+
 	s.render(w, http.StatusOK, "dashboard", providerTitle(provider.Name), false, dashboardData{
-		ProviderName:      provider.Name,
-		Properties:        props,
-		SourceKind:        string(cfg.Source.Kind),
-		RefreshMinutes:    int(cfg.RefreshInterval.Minutes()),
-		WebhookConfigured: cfg.WebhookURL != "",
-		QueueCount:        queueCount,
-		LastError:         errMsg,
+		ProviderName:        provider.Name,
+		Properties:          props,
+		SourceKind:          string(cfg.Source.Kind),
+		SourceLabel:         cfg.SourceLabel,
+		SourceUpdatedAtISO:  updatedISO,
+		SourceUpdatedAtText: updatedText,
+		RefreshMinutes:      int(cfg.RefreshInterval.Minutes()),
+		WebhookConfigured:   cfg.WebhookURL != "",
+		QueueCount:          queueCount,
+		LastError:           errMsg,
 	})
 }
 
