@@ -182,6 +182,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/onboarding/webhook/skip", s.handleWebhookSkip)
 	mux.HandleFunc("/refresh", s.handleRefresh)
 	mux.HandleFunc("/queue", s.handleQueue)
+	mux.HandleFunc("/queue/confirm", s.handleQueueConfirm)
+	mux.HandleFunc("/queue/deny", s.handleQueueDeny)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFileSystem()))))
 	return mux
 }

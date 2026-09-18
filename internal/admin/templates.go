@@ -5,6 +5,7 @@ import (
 	"embed"
 	"html/template"
 	"net/http"
+	"net/url"
 )
 
 //go:embed templates/*.html
@@ -12,6 +13,10 @@ var templateFS embed.FS
 
 func parseTemplates() (*template.Template, error) {
 	return template.ParseFS(templateFS, "templates/*.html")
+}
+
+func redirectWithError(w http.ResponseWriter, r *http.Request, path string, err error) {
+	http.Redirect(w, r, path+"?error="+url.QueryEscape(err.Error()), http.StatusFound)
 }
 
 type pageData struct {
