@@ -112,3 +112,106 @@ func TestLLMsTxtRouteServesPlainText(t *testing.T) {
 		t.Errorf("body missing facts link: %s", rec.Body.String())
 	}
 }
+
+func TestRootRouteRedirectsToLLMsTxtByDefault(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/llms.txt" {
+		t.Errorf("Location = %q, want /llms.txt", loc)
+	}
+}
+
+func TestRootRouteServesJSONIndexWhenJSONRequested(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Accept", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Errorf("Content-Type = %q, want application/json", ct)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"llms_txt", "agent_card", "mcp_manifest", "\"mcp\"", "facts"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q: %s", want, body)
+		}
+	}
+}
+
+func TestMCPManifestRouteServesJSON(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/mcp.json", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Errorf("Content-Type = %q, want application/json", ct)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"/mcp", "streamable-http", "protocolVersion"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q: %s", want, body)
+		}
+	}
+}
+
+func TestRobotsRouteServesPlainTextWithLLMsTxtPointer(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/robots.txt", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "llms.txt") {
+		t.Errorf("body missing llms.txt pointer: %s", rec.Body.String())
+	}
+}
+
+func TestUnknownPathStill404sInsteadOfClaimingRoot(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/whatever-the-host-app-owns", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (root claim must not become a catch-all)", rec.Code)
+	}
+}
+
+func TestDiscoveryLinkHeaderPresentOnEveryResponse(t *testing.T) {
+	srv := newTestServer(t)
+
+	for _, path := range []string{"/facts.jsonld", "/nonexistent-path"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+
+		srv.Handler().ServeHTTP(rec, req)
+
+		link := rec.Header().Get("Link")
+		for _, want := range []string{`rel="llms-txt"`, `rel="agent-card"`, `rel="mcp-manifest"`, `rel="mcp-server"`} {
+			if !strings.Contains(link, want) {
+				t.Errorf("path %s: Link header missing %s: %s", path, want, link)
+			}
+		}
+	}
+}
