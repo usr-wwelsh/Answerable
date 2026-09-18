@@ -19,6 +19,10 @@ func testProvider() facts.Provider {
 	}
 }
 
+func testProviderNamed(name string) facts.Provider {
+	return facts.Provider{Name: name}
+}
+
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	return New(testProvider(), openTestBookingStore(t), "")

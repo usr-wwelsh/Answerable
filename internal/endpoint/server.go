@@ -57,6 +57,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/book", s.handleBook)
 	mux.HandleFunc("/confirm", s.handleConfirm)
 	mux.HandleFunc("/deny", s.handleDeny)
+	mux.Handle("/mcp", s.mcpHandler())
 	return mux
 }
 
@@ -89,7 +90,7 @@ func (s *Server) handleAgentCard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLLMsTxt(w http.ResponseWriter, r *http.Request) {
-	out := llmstxt.Render(s.currentProvider(), baseURL(r)+"/facts.jsonld", baseURL(r)+"/.well-known/agent.json")
+	out := llmstxt.Render(s.currentProvider(), baseURL(r)+"/facts.jsonld", baseURL(r)+"/.well-known/agent.json", baseURL(r)+"/mcp")
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Write([]byte(out))
 }
