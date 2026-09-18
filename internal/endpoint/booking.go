@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -19,6 +20,51 @@ type bookRequestBody struct {
 	Need    string `json:"need"`
 }
 
+// bookingValidationError marks an intake error as caused by bad caller
+// input (safe to relay verbatim), as opposed to a store failure (which
+// isn't, since it may carry internal detail).
+type bookingValidationError struct{ msg string }
+
+func (e *bookingValidationError) Error() string { return e.msg }
+
+// bookIntake runs the intake-request flow shared by the HTTP /book route
+// and the MCP book_intake tool: validate, enqueue, and notify the webhook
+// if one is configured. baseURL is used to build the confirm/deny links
+// sent to the webhook.
+func (s *Server) bookIntake(baseURL, name, contact, need string) (booking.Request, string, error) {
+	name = strings.TrimSpace(name)
+	contact = strings.TrimSpace(contact)
+	need = strings.TrimSpace(need)
+
+	if name == "" || need == "" {
+		return booking.Request{}, "", &bookingValidationError{"name and need are required"}
+	}
+	if len(name) > maxFieldLen || len(contact) > maxFieldLen || len(need) > maxFieldLen {
+		return booking.Request{}, "", &bookingValidationError{"field too long"}
+	}
+
+	req, err := s.store.Enqueue(name, contact, need)
+	if err != nil {
+		return booking.Request{}, "", err
+	}
+
+	message := "This request has been queued for provider review. If this is urgent, contacting them by phone directly may be faster."
+
+	if webhookURL := s.currentWebhook(); webhookURL != "" {
+		confirmURL := baseURL + "/confirm?token=" + req.Token
+		denyURL := baseURL + "/deny?token=" + req.Token
+		notifyMsg := fmt.Sprintf(
+			"New intake request from %s (%s): %s\nConfirm: %s\nDeny: %s",
+			req.Name, req.Contact, req.Need, confirmURL, denyURL,
+		)
+		if err := webhook.Notify(webhookURL, notifyMsg); err == nil {
+			message = "Your request has been sent to the provider. They'll confirm shortly."
+		}
+	}
+
+	return req, message, nil
+}
+
 func (s *Server) handleBook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -33,37 +79,15 @@ func (s *Server) handleBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body.Name = strings.TrimSpace(body.Name)
-	body.Contact = strings.TrimSpace(body.Contact)
-	body.Need = strings.TrimSpace(body.Need)
-
-	if body.Name == "" || body.Need == "" {
-		http.Error(w, "name and need are required", http.StatusBadRequest)
-		return
-	}
-	if len(body.Name) > maxFieldLen || len(body.Contact) > maxFieldLen || len(body.Need) > maxFieldLen {
-		http.Error(w, "field too long", http.StatusBadRequest)
-		return
-	}
-
-	req, err := s.store.Enqueue(body.Name, body.Contact, body.Need)
+	_, message, err := s.bookIntake(baseURL(r), body.Name, body.Contact, body.Need)
 	if err != nil {
+		var verr *bookingValidationError
+		if errors.As(err, &verr) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		http.Error(w, "failed to queue request", http.StatusInternalServerError)
 		return
-	}
-
-	message := "This request has been queued for provider review. If this is urgent, contacting them by phone directly may be faster."
-
-	if webhookURL := s.currentWebhook(); webhookURL != "" {
-		confirmURL := baseURL(r) + "/confirm?token=" + req.Token
-		denyURL := baseURL(r) + "/deny?token=" + req.Token
-		notifyMsg := fmt.Sprintf(
-			"New intake request from %s (%s): %s\nConfirm: %s\nDeny: %s",
-			req.Name, req.Contact, req.Need, confirmURL, denyURL,
-		)
-		if err := webhook.Notify(webhookURL, notifyMsg); err == nil {
-			message = "Your request has been sent to the provider. They'll confirm shortly."
-		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
