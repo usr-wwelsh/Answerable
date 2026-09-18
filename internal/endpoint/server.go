@@ -4,17 +4,20 @@ import (
 	"net/http"
 
 	"github.com/usr-wwelsh/answerable/internal/agentcard"
+	"github.com/usr-wwelsh/answerable/internal/booking"
 	"github.com/usr-wwelsh/answerable/internal/facts"
 	"github.com/usr-wwelsh/answerable/internal/jsonld"
 	"github.com/usr-wwelsh/answerable/internal/llmstxt"
 )
 
 type Server struct {
-	provider facts.Provider
+	provider   facts.Provider
+	store      *booking.Store
+	webhookURL string
 }
 
-func New(p facts.Provider) *Server {
-	return &Server{provider: p}
+func New(p facts.Provider, store *booking.Store, webhookURL string) *Server {
+	return &Server{provider: p, store: store, webhookURL: webhookURL}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -22,6 +25,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/facts.jsonld", s.handleFacts)
 	mux.HandleFunc("/.well-known/agent.json", s.handleAgentCard)
 	mux.HandleFunc("/llms.txt", s.handleLLMsTxt)
+	mux.HandleFunc("/book", s.handleBook)
+	mux.HandleFunc("/confirm", s.handleConfirm)
+	mux.HandleFunc("/deny", s.handleDeny)
 	return mux
 }
 

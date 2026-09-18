@@ -19,8 +19,13 @@ func testProvider() facts.Provider {
 	}
 }
 
+func newTestServer(t *testing.T) *Server {
+	t.Helper()
+	return New(testProvider(), openTestBookingStore(t), "")
+}
+
 func TestFactsRouteServesJSONLD(t *testing.T) {
-	srv := New(testProvider())
+	srv := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/facts.jsonld", nil)
 	rec := httptest.NewRecorder()
 
@@ -38,7 +43,7 @@ func TestFactsRouteServesJSONLD(t *testing.T) {
 }
 
 func TestAgentCardRouteServesJSON(t *testing.T) {
-	srv := New(testProvider())
+	srv := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/agent.json", nil)
 	rec := httptest.NewRecorder()
 
@@ -53,7 +58,7 @@ func TestAgentCardRouteServesJSON(t *testing.T) {
 }
 
 func TestLLMsTxtRouteServesPlainText(t *testing.T) {
-	srv := New(testProvider())
+	srv := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/llms.txt", nil)
 	rec := httptest.NewRecorder()
 
