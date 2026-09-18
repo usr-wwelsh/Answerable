@@ -57,6 +57,43 @@ func TestAgentCardRouteServesJSON(t *testing.T) {
 	}
 }
 
+func TestUpdateProviderReflectsInFactsRoute(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.UpdateProvider(facts.Provider{Name: "Renamed Shelter"})
+
+	req := httptest.NewRequest(http.MethodGet, "/facts.jsonld", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if !strings.Contains(rec.Body.String(), "Renamed Shelter") {
+		t.Errorf("body missing updated provider name: %s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "Test Shelter A") {
+		t.Errorf("body still contains stale provider name: %s", rec.Body.String())
+	}
+}
+
+func TestUpdateWebhookChangesNotificationTarget(t *testing.T) {
+	notified := make(chan struct{}, 1)
+	hookSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		notified <- struct{}{}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer hookSrv.Close()
+
+	srv := newTestServer(t)
+	srv.UpdateWebhook(hookSrv.URL)
+
+	postBook(t, srv, `{"name":"Jane Doe","contact":"555-0100","need":"bed for two tonight"}`)
+
+	select {
+	case <-notified:
+	default:
+		t.Fatal("updated webhook was not notified")
+	}
+}
+
 func TestLLMsTxtRouteServesPlainText(t *testing.T) {
 	srv := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/llms.txt", nil)

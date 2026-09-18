@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/usr-wwelsh/answerable/internal/booking"
 	"github.com/usr-wwelsh/answerable/internal/endpoint"
@@ -53,23 +52,9 @@ func loadProvider(path string) (facts.Provider, error) {
 	}
 	defer f.Close()
 
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".csv":
-		records, err := parser.ParseCSV(f)
-		if err != nil {
-			return facts.Provider{}, err
-		}
-		if len(records) == 0 {
-			return facts.Provider{}, fmt.Errorf("no rows found in %s", path)
-		}
-		return facts.FromRecord(records[0])
-	case ".md", ".txt":
-		rec, err := parser.ParseText(f)
-		if err != nil {
-			return facts.Provider{}, err
-		}
-		return facts.FromRecord(rec)
-	default:
-		return facts.Provider{}, fmt.Errorf("unsupported file type: %s", path)
+	rec, err := parser.ParseByExtension(filepath.Ext(path), f)
+	if err != nil {
+		return facts.Provider{}, err
 	}
+	return facts.FromRecord(rec)
 }

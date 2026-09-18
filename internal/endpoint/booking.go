@@ -54,14 +54,14 @@ func (s *Server) handleBook(w http.ResponseWriter, r *http.Request) {
 
 	message := "This request has been queued for provider review. If this is urgent, contacting them by phone directly may be faster."
 
-	if s.webhookURL != "" {
+	if webhookURL := s.currentWebhook(); webhookURL != "" {
 		confirmURL := baseURL(r) + "/confirm?token=" + req.Token
 		denyURL := baseURL(r) + "/deny?token=" + req.Token
 		notifyMsg := fmt.Sprintf(
 			"New intake request from %s (%s): %s\nConfirm: %s\nDeny: %s",
 			req.Name, req.Contact, req.Need, confirmURL, denyURL,
 		)
-		if err := webhook.Notify(s.webhookURL, notifyMsg); err == nil {
+		if err := webhook.Notify(webhookURL, notifyMsg); err == nil {
 			message = "Your request has been sent to the provider. They'll confirm shortly."
 		}
 	}
