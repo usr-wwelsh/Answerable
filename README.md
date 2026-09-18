@@ -11,4 +11,8 @@ gets the provider's real current answer instead of stale scraped data.
 Built for Venture 313 Buildathon 2026, category: Open, Accessible & Responsible
 Government.
 
+If you're adding Answerable to an existing web stack, you'll need to set up
+Caddy (see `Dockerfile` / `deploy/`) and the admin UI password if you intend
+for that to be public.
+
 MIT licensed.

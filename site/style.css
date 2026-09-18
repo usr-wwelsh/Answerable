@@ -1,0 +1,33 @@
+:root { color-scheme: light dark; }
+
+body {
+  font-family: system-ui, sans-serif;
+  max-width: 40rem;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  line-height: 1.5;
+}
+
+.banner {
+  background: #fff3cd;
+  color: #663c00;
+  border: 1px solid #f0c36d;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+
+header { margin-bottom: 1.5rem; }
+.tagline { color: #555; }
+
+section { margin-bottom: 1.5rem; }
+h2 { font-size: 1.1rem; }
+
+footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #ddd;
+  font-size: 0.85rem;
+  color: #666;
+}
