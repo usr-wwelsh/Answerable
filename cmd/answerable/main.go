@@ -22,7 +22,8 @@ func main() {
 	file := flag.String("file", "", "optional: path to a CSV/md/txt/pdf fact source to pre-seed on first run")
 	webhookURL := flag.String("webhook", "", "optional: webhook URL to pre-seed on first run")
 	port := flag.String("port", "8081", "public endpoint port")
-	adminPort := flag.String("admin-port", "8090", "admin webui port, 127.0.0.1 only")
+	adminBind := flag.String("admin-bind", "127.0.0.1", "admin webui bind address; widening past loopback requires ANSWERABLE_ADMIN_PASSWORD")
+	adminPort := flag.String("admin-port", "8090", "admin webui port")
 	dbPath := flag.String("db", "answerable.db", "path to the local database (booking queue + config)")
 	noBrowser := flag.Bool("no-browser", false, "don't open the admin webui in a browser on startup")
 	flag.Parse()
@@ -54,10 +55,16 @@ func main() {
 		log.Fatalf("failed to start admin webui: %v", err)
 	}
 
-	adminAddr := "127.0.0.1:" + *adminPort
+	adminPassword := os.Getenv("ANSWERABLE_ADMIN_PASSWORD")
+	if err := admin.RequireAuthForBind(*adminBind, adminPassword); err != nil {
+		log.Fatal(err)
+	}
+	adminHandler := admin.WrapWithAuth(*adminBind, adminPassword, adminSrv.Handler())
+
+	adminAddr := *adminBind + ":" + *adminPort
 	go func() {
 		log.Printf("Admin setup at http://%s", adminAddr)
-		if err := http.ListenAndServe(adminAddr, adminSrv.Handler()); err != nil {
+		if err := http.ListenAndServe(adminAddr, adminHandler); err != nil {
 			log.Fatal(err)
 		}
 	}()
