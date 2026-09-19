@@ -87,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/.well-known/agent.json", s.handleAgentCard)
 	mux.HandleFunc("/.well-known/mcp.json", s.handleMCPManifest)
 	mux.HandleFunc("/llms.txt", s.handleLLMsTxt)
+	mux.HandleFunc("/agents", s.handleIndex)
 	mux.HandleFunc("/book", s.handleBook)
 	mux.HandleFunc("/status", s.handleStatus)
 	mux.HandleFunc("/confirm", s.handleConfirm)

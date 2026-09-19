@@ -144,6 +144,40 @@ func TestRootRouteRedirectsToLLMsTxtByDefault(t *testing.T) {
 	}
 }
 
+func TestAgentsRouteRedirectsToLLMsTxtByDefault(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/agents", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/llms.txt" {
+		t.Errorf("Location = %q, want /llms.txt", loc)
+	}
+}
+
+func TestAgentsRouteServesJSONIndexWhenJSONRequested(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/agents", nil)
+	req.Header.Set("Accept", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"llms_txt", "agent_card", "mcp_manifest", "\"mcp\"", "facts"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q: %s", want, body)
+		}
+	}
+}
+
 func TestRootRouteServesJSONIndexWhenJSONRequested(t *testing.T) {
 	srv := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
