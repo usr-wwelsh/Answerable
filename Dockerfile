@@ -3,7 +3,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /out/answerable ./cmd/answerable
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/answerable ./cmd/answerable
 
 FROM caddy:2-alpine
 COPY --from=build /out/answerable /usr/local/bin/answerable
