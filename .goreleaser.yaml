@@ -18,10 +18,7 @@ builds:
 
 archives:
   - id: answerable
-    formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
+    formats: [binary]
     name_template: >-
       {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}
 
@@ -35,3 +32,39 @@ release:
   github:
     owner: usr-wwelsh
     name: answerable
+  header: |
+    Answerable makes your organization's facts (hours, availability, eligibility) available to AI agents. No install, no dependencies — download one file and run it.
+
+    ### Which file do I download?
+
+    | Your computer | Download |
+    |---|---|
+    | Windows (most PCs) | `answerable_windows_amd64.exe` |
+    | Windows on ARM (e.g. Surface Pro X) | `answerable_windows_arm64.exe` |
+    | Mac, 2020 or newer (Apple Silicon) | `answerable_darwin_arm64` |
+    | Mac, older (Intel) | `answerable_darwin_amd64` |
+    | Linux, most PCs/servers | `answerable_linux_amd64` |
+    | Linux on ARM (e.g. Raspberry Pi) | `answerable_linux_arm64` |
+
+    Not sure which Mac you have? Click the Apple menu → **About This Mac**. If it says "Chip: Apple M1/M2/M3/M4," use the Apple Silicon file; if it says "Processor: Intel," use the Intel file.
+  footer: |
+    ### How to run it
+
+    1. Download the file that matches your computer from the table above.
+    2. **Windows**: double-click the `.exe` file. If you see "Windows protected your PC," click **More info**, then **Run anyway** — this warning is normal for a new tool that isn't yet registered with Microsoft.
+    3. **Mac**: open **Terminal** (search for it with Spotlight), then run:
+       ```
+       cd ~/Downloads
+       chmod +x answerable_darwin_arm64
+       ./answerable_darwin_arm64
+       ```
+       (swap in `answerable_darwin_amd64` if you're on an Intel Mac). The first time, macOS will say it can't verify the app — go to **System Settings → Privacy & Security** and click **Open Anyway**, then run the command again.
+    4. **Linux**: open a terminal in your Downloads folder and run:
+       ```
+       chmod +x answerable_linux_amd64
+       ./answerable_linux_amd64
+       ```
+
+    Once it's running, a setup page opens automatically in your browser. Drop in a CSV, PDF, or text file with your facts, and you're live — nothing leaves your machine unless you connect a webhook or email address on that setup page.
+
+    Full docs: https://github.com/usr-wwelsh/answerable#readme
