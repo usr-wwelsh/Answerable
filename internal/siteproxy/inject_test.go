@@ -25,6 +25,29 @@ func TestInjectLinksHandlesHeadWithAttributes(t *testing.T) {
 	}
 }
 
+func TestInjectLinksAddsVisibleFooterLinkBeforeBodyClose(t *testing.T) {
+	body := []byte("<html><head><title>x</title></head><body><p>hi</p></body></html>")
+	out := string(InjectLinks(body, DefaultLinks))
+
+	bodyCloseIdx := strings.Index(out, "</body>")
+	linkIdx := strings.Index(out, `<a href="/llms.txt">`)
+	if linkIdx == -1 {
+		t.Fatalf("no visible <a> link to /llms.txt in body: %s", out)
+	}
+	if linkIdx > bodyCloseIdx {
+		t.Errorf("visible link inserted after </body>: %s", out)
+	}
+}
+
+func TestInjectLinksLeavesBodyWithoutBodyCloseUntouched(t *testing.T) {
+	body := []byte(`<html><head><title>x</title></head></html>`)
+	out := string(InjectLinks(body, DefaultLinks))
+
+	if strings.Contains(out, "<a href=") {
+		t.Errorf("visible link injected with no </body> to anchor to: %s", out)
+	}
+}
+
 func TestInjectLinksLeavesBodyWithoutHeadUntouched(t *testing.T) {
 	body := []byte(`{"just":"json"}`)
 	out := InjectLinks(body, DefaultLinks)
