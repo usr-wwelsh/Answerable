@@ -11,7 +11,7 @@ import (
 var client = &http.Client{Timeout: 10 * time.Second}
 
 func Notify(url, message string) error {
-	payload, err := json.Marshal(map[string]string{"content": message})
+	payload, err := json.Marshal(map[string]string{"content": message, "text": message})
 	if err != nil {
 		return err
 	}

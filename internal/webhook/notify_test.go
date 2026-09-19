@@ -24,6 +24,9 @@ func TestNotifyPostsContentField(t *testing.T) {
 	if gotBody["content"] != "new intake request from Jane Doe" {
 		t.Errorf("content = %q, want %q", gotBody["content"], "new intake request from Jane Doe")
 	}
+	if gotBody["text"] != "new intake request from Jane Doe" {
+		t.Errorf("text = %q, want %q", gotBody["text"], "new intake request from Jane Doe")
+	}
 }
 
 func TestNotifyErrorsOnNonSuccessStatus(t *testing.T) {
