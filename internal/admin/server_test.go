@@ -18,6 +18,7 @@ type harness struct {
 	srv       *Server
 	updates   []facts.Provider
 	webhooks  []string
+	emails    []config.Email
 	cfgStore  *config.Store
 	bookStore *booking.Store
 }
@@ -45,6 +46,7 @@ func newHarness(t *testing.T) *harness {
 		UploadDir:    t.TempDir(),
 		OnProvider:   func(p facts.Provider) { h.updates = append(h.updates, p) },
 		OnWebhook:    func(url string) { h.webhooks = append(h.webhooks, url) },
+		OnEmail:      func(e config.Email) { h.emails = append(h.emails, e) },
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -128,8 +130,8 @@ func TestSourceUploadSetsProviderAndAdvancesToWebhookStep(t *testing.T) {
 	if rec.Code != http.StatusFound {
 		t.Fatalf("status = %d, want 302, body=%s", rec.Code, rec.Body.String())
 	}
-	if loc := rec.Header().Get("Location"); loc != "/onboarding/webhook" {
-		t.Errorf("Location = %q, want /onboarding/webhook", loc)
+	if loc := rec.Header().Get("Location"); loc != "/onboarding/delivery" {
+		t.Errorf("Location = %q, want /onboarding/delivery", loc)
 	}
 	if len(h.updates) != 1 || h.updates[0].Name != "Test Shelter" {
 		t.Fatalf("updates = %+v, want one update named Test Shelter", h.updates)
@@ -217,6 +219,129 @@ func TestWebhookStepSkipDoesNotCallOnWebhook(t *testing.T) {
 	}
 	if len(h.webhooks) != 0 {
 		t.Fatalf("expected skip to avoid calling OnWebhook, got %+v", h.webhooks)
+	}
+}
+
+func TestOnboardingDeliveryOffersWebhookAndEmailChoices(t *testing.T) {
+	h := newHarness(t)
+	rec := h.do(t, http.MethodGet, "/onboarding/delivery", nil, "")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/onboarding/webhook"`) {
+		t.Errorf("delivery choice screen missing link to webhook step: %s", body)
+	}
+	if !strings.Contains(body, `href="/onboarding/email"`) {
+		t.Errorf("delivery choice screen missing link to email step: %s", body)
+	}
+}
+
+func TestEmailStepSavesAndRedirectsHome(t *testing.T) {
+	h := newHarness(t)
+	form := "smtp_host=smtp.example.com&smtp_port=587&username=shelter%40example.com&password=app-password&from=shelter%40example.com&to=oncall%40example.com"
+	req := httptest.NewRequest(http.MethodPost, "/onboarding/email", strings.NewReader(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	h.srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302, body=%s", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); loc != "/" {
+		t.Errorf("Location = %q, want /", loc)
+	}
+	if len(h.emails) != 1 {
+		t.Fatalf("emails = %+v, want one saved config", h.emails)
+	}
+	got := h.emails[0]
+	want := config.Email{
+		SMTPHost: "smtp.example.com",
+		SMTPPort: 587,
+		Username: "shelter@example.com",
+		Password: "app-password",
+		From:     "shelter@example.com",
+		To:       "oncall@example.com",
+	}
+	if got != want {
+		t.Errorf("saved email = %+v, want %+v", got, want)
+	}
+
+	cfg, ok, err := h.cfgStore.Load()
+	if err != nil || !ok {
+		t.Fatalf("Load: ok=%v err=%v", ok, err)
+	}
+	if cfg.Email != want {
+		t.Errorf("persisted email = %+v, want %+v", cfg.Email, want)
+	}
+}
+
+func TestEmailStepSkipDoesNotCallOnEmail(t *testing.T) {
+	h := newHarness(t)
+	rec := h.do(t, http.MethodPost, "/onboarding/email/skip", nil, "")
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", rec.Code)
+	}
+	if len(h.emails) != 0 {
+		t.Fatalf("expected skip to avoid calling OnEmail, got %+v", h.emails)
+	}
+}
+
+func TestEmailStepRejectsInvalidAddress(t *testing.T) {
+	h := newHarness(t)
+	form := "smtp_host=smtp.example.com&smtp_port=587&from=not-an-email&to=oncall%40example.com"
+	req := httptest.NewRequest(http.MethodPost, "/onboarding/email", strings.NewReader(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	h.srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body=%s", rec.Code, rec.Body.String())
+	}
+	if len(h.emails) != 0 {
+		t.Fatalf("expected no saved config on validation error, got %+v", h.emails)
+	}
+}
+
+func TestEmailStepRejectsInvalidPort(t *testing.T) {
+	h := newHarness(t)
+	form := "smtp_host=smtp.example.com&smtp_port=notanumber&from=shelter%40example.com&to=oncall%40example.com"
+	req := httptest.NewRequest(http.MethodPost, "/onboarding/email", strings.NewReader(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	h.srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestEmailStepPreservesPasswordWhenLeftBlankOnEdit(t *testing.T) {
+	h := newHarness(t)
+	first := "smtp_host=smtp.example.com&smtp_port=587&username=shelter%40example.com&password=app-password&from=shelter%40example.com&to=oncall%40example.com"
+	req := httptest.NewRequest(http.MethodPost, "/onboarding/email", strings.NewReader(first))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	h.srv.Handler().ServeHTTP(httptest.NewRecorder(), req)
+
+	second := "smtp_host=smtp.example.com&smtp_port=587&username=shelter%40example.com&password=&from=shelter%40example.com&to=oncall2%40example.com"
+	req2 := httptest.NewRequest(http.MethodPost, "/onboarding/email", strings.NewReader(second))
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec2 := httptest.NewRecorder()
+	h.srv.Handler().ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302, body=%s", rec2.Code, rec2.Body.String())
+	}
+	if len(h.emails) != 2 {
+		t.Fatalf("emails = %+v, want two saves", h.emails)
+	}
+	if h.emails[1].Password != "app-password" {
+		t.Errorf("Password = %q, want preserved app-password when left blank", h.emails[1].Password)
+	}
+	if h.emails[1].To != "oncall2@example.com" {
+		t.Errorf("To = %q, want updated address oncall2@example.com", h.emails[1].To)
 	}
 }
 

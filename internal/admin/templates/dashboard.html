@@ -38,10 +38,12 @@
     <h2>New request notifications</h2>
     {{if .WebhookConfigured}}
       <p>Connected — new requests will ping your chat channel.</p>
+    {{else if .EmailConfigured}}
+      <p>Connected — new requests will be emailed to you.</p>
     {{else}}
       <p>Not connected yet. New requests are still saved below, but nothing will notify you.</p>
     {{end}}
-    <p><a href="/onboarding/webhook">Change this</a></p>
+    <p><a href="/onboarding/delivery">Change this</a></p>
   </div>
 
   <div class="card">

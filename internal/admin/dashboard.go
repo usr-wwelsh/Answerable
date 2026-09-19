@@ -20,6 +20,7 @@ type dashboardData struct {
 	SourceUpdatedAtText string
 	RefreshMinutes      int
 	WebhookConfigured   bool
+	EmailConfigured     bool
 	QueueCount          int
 	LastError           string
 }
@@ -67,6 +68,7 @@ func (s *Server) renderDashboard(w http.ResponseWriter, r *http.Request) {
 		SourceUpdatedAtText: updatedText,
 		RefreshMinutes:      int(cfg.RefreshInterval.Minutes()),
 		WebhookConfigured:   cfg.WebhookURL != "",
+		EmailConfigured:     cfg.Email.To != "",
 		QueueCount:          queueCount,
 		LastError:           errMsg,
 	})

@@ -13,6 +13,7 @@ import (
 	"github.com/usr-wwelsh/answerable/internal/admin"
 	"github.com/usr-wwelsh/answerable/internal/booking"
 	"github.com/usr-wwelsh/answerable/internal/config"
+	"github.com/usr-wwelsh/answerable/internal/email"
 	"github.com/usr-wwelsh/answerable/internal/endpoint"
 	"github.com/usr-wwelsh/answerable/internal/facts"
 	"github.com/usr-wwelsh/answerable/internal/parser"
@@ -50,6 +51,16 @@ func main() {
 		UploadDir:    filepath.Dir(*dbPath),
 		OnProvider:   srv.UpdateProvider,
 		OnWebhook:    srv.UpdateWebhook,
+		OnEmail: func(e config.Email) {
+			srv.UpdateEmail(email.Config{
+				SMTPHost: e.SMTPHost,
+				SMTPPort: e.SMTPPort,
+				Username: e.Username,
+				Password: e.Password,
+				From:     e.From,
+				To:       e.To,
+			})
+		},
 	})
 	if err != nil {
 		log.Fatalf("failed to start admin webui: %v", err)

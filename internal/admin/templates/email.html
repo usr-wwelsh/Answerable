@@ -1,0 +1,39 @@
+{{define "email"}}
+<div class="card">
+  <h1>Where should we send email notifications?</h1>
+  <p class="lede">
+    We'll send a plain email through your own mail account each time someone
+    submits a request. No third-party email service, no new account to make.
+  </p>
+
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+
+  <form method="post" action="/onboarding/email" class="stack">
+    <label for="smtp_host">Mail server (SMTP host)</label>
+    <input type="text" id="smtp_host" name="smtp_host" placeholder="smtp.gmail.com" value="{{.SMTPHost}}">
+
+    <label for="smtp_port">Port</label>
+    <input type="number" id="smtp_port" name="smtp_port" placeholder="587" value="{{.SMTPPort}}">
+
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" placeholder="you@example.com" value="{{.Username}}">
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" placeholder="{{if .HasPassword}}Leave blank to keep the current password{{else}}app password{{end}}">
+    <p class="hint">For Gmail or Office 365, use an "app password," not your normal login password.</p>
+
+    <label for="from">From address</label>
+    <input type="email" id="from" name="from" placeholder="shelter@example.com" value="{{.From}}">
+
+    <label for="to">Send requests to</label>
+    <input type="email" id="to" name="to" placeholder="oncall@example.com" value="{{.To}}">
+
+    <div class="actions">
+      <button type="submit" class="button">Save and finish</button>
+      <button type="submit" form="skip-form" class="button secondary">Skip for now</button>
+    </div>
+  </form>
+  <form id="skip-form" method="post" action="/onboarding/email/skip"></form>
+  <p class="hint">You can always add this later. Requests are saved either way, and you'll see them the next time you open this page.</p>
+</div>
+{{end}}

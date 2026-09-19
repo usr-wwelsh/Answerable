@@ -25,6 +25,7 @@ type Deps struct {
 	UploadDir    string
 	OnProvider   func(facts.Provider)
 	OnWebhook    func(string)
+	OnEmail      func(config.Email)
 }
 
 type Server struct {
@@ -33,6 +34,7 @@ type Server struct {
 	uploadDir  string
 	onProvider func(facts.Provider)
 	onWebhook  func(string)
+	onEmail    func(config.Email)
 	fetcher    *ingest.Fetcher
 	tmpl       *template.Template
 
@@ -56,6 +58,7 @@ func New(d Deps) (*Server, error) {
 		uploadDir:        d.UploadDir,
 		onProvider:       d.OnProvider,
 		onWebhook:        d.OnWebhook,
+		onEmail:          d.OnEmail,
 		fetcher:          ingest.NewFetcher(),
 		tmpl:             tmpl,
 		onboardingActive: true,
@@ -91,6 +94,9 @@ func (s *Server) restore() {
 	}
 	if s.onWebhook != nil && s.cfg.WebhookURL != "" {
 		s.onWebhook(s.cfg.WebhookURL)
+	}
+	if s.onEmail != nil && s.cfg.Email.To != "" {
+		s.onEmail(s.cfg.Email)
 	}
 	s.startRefresherLocked()
 }
@@ -178,8 +184,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/", s.handleRoot)
 	mux.HandleFunc("/onboarding", s.handleOnboardingIntro)
 	mux.HandleFunc("/onboarding/source", s.handleSource)
+	mux.HandleFunc("/onboarding/delivery", s.handleOnboardingDelivery)
 	mux.HandleFunc("/onboarding/webhook", s.handleWebhook)
-	mux.HandleFunc("/onboarding/webhook/skip", s.handleWebhookSkip)
+	mux.HandleFunc("/onboarding/webhook/skip", s.handleOnboardingSkip)
+	mux.HandleFunc("/onboarding/email", s.handleEmail)
+	mux.HandleFunc("/onboarding/email/skip", s.handleOnboardingSkip)
 	mux.HandleFunc("/refresh", s.handleRefresh)
 	mux.HandleFunc("/queue", s.handleQueue)
 	mux.HandleFunc("/queue/confirm", s.handleQueueConfirm)

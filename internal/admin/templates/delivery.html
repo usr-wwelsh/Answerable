@@ -1,0 +1,20 @@
+{{define "delivery"}}
+<div class="card">
+  <h1>How would you like to receive requests?</h1>
+  <p class="lede">
+    When someone submits a request, we'll let you know one of these ways.
+    Pick whichever you'll actually check.
+  </p>
+
+  <div class="choice-grid">
+    <a class="choice-tile" href="/onboarding/webhook">
+      <h2>Chat notification</h2>
+      <p class="hint">Slack, Discord, or Microsoft Teams. Click a link there to confirm or turn it down.</p>
+    </a>
+    <a class="choice-tile" href="/onboarding/email">
+      <h2>Email (Advanced)</h2>
+      <p class="hint">Sent through your own mail account, like Gmail or Office 365. A few extra settings to fill in.</p>
+    </a>
+  </div>
+</div>
+{{end}}

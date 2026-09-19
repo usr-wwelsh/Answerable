@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/usr-wwelsh/answerable/internal/config"
+	"github.com/usr-wwelsh/answerable/internal/email"
 	"github.com/usr-wwelsh/answerable/internal/facts"
 	"github.com/usr-wwelsh/answerable/internal/ingest"
 	"github.com/usr-wwelsh/answerable/internal/parser"
@@ -28,6 +29,16 @@ type sourceData struct {
 type webhookData struct {
 	Error      string
 	WebhookURL string
+}
+
+type emailData struct {
+	Error       string
+	SMTPHost    string
+	SMTPPort    string
+	Username    string
+	From        string
+	To          string
+	HasPassword bool
 }
 
 func (s *Server) handleOnboardingIntro(w http.ResponseWriter, r *http.Request) {
@@ -163,8 +174,12 @@ func (s *Server) handleSource(w http.ResponseWriter, r *http.Request) {
 	if wasConfigured {
 		http.Redirect(w, r, "/", http.StatusFound)
 	} else {
-		http.Redirect(w, r, "/onboarding/webhook", http.StatusFound)
+		http.Redirect(w, r, "/onboarding/delivery", http.StatusFound)
 	}
+}
+
+func (s *Server) handleOnboardingDelivery(w http.ResponseWriter, r *http.Request) {
+	s.render(w, http.StatusOK, "delivery", "How should requests reach you?", s.isOnboarding(), nil)
 }
 
 func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
@@ -217,13 +232,102 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-func (s *Server) handleWebhookSkip(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleOnboardingSkip(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	s.finishOnboarding()
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func (s *Server) renderEmailForm(w http.ResponseWriter, status int, data emailData) {
+	s.render(w, status, "email", "Where should requests go?", s.isOnboarding(), data)
+}
+
+func (s *Server) handleEmail(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		s.mu.Lock()
+		current := s.cfg.Email
+		s.mu.Unlock()
+		s.renderEmailForm(w, http.StatusOK, emailDataFromConfig(current))
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		s.renderEmailForm(w, http.StatusBadRequest, emailData{Error: "Something went wrong reading that form."})
+		return
+	}
+
+	host := strings.TrimSpace(r.FormValue("smtp_host"))
+	portRaw := strings.TrimSpace(r.FormValue("smtp_port"))
+	username := strings.TrimSpace(r.FormValue("username"))
+	password := r.FormValue("password")
+	from := strings.TrimSpace(r.FormValue("from"))
+	to := strings.TrimSpace(r.FormValue("to"))
+
+	if host == "" && portRaw == "" && username == "" && password == "" && from == "" && to == "" {
+		s.finishOnboarding()
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+
+	echo := emailData{SMTPHost: host, SMTPPort: portRaw, Username: username, From: from, To: to}
+
+	port, err := strconv.Atoi(portRaw)
+	if err != nil {
+		echo.Error = "Port must be a number, like 587."
+		s.renderEmailForm(w, http.StatusBadRequest, echo)
+		return
+	}
+
+	s.mu.Lock()
+	if password == "" {
+		password = s.cfg.Email.Password
+	}
+	s.mu.Unlock()
+
+	newEmail := config.Email{SMTPHost: host, SMTPPort: port, Username: username, Password: password, From: from, To: to}
+	if err := (email.Config{SMTPHost: newEmail.SMTPHost, SMTPPort: newEmail.SMTPPort, From: newEmail.From, To: newEmail.To}).Validate(); err != nil {
+		echo.Error = "That doesn't look right: " + err.Error()
+		s.renderEmailForm(w, http.StatusBadRequest, echo)
+		return
+	}
+
+	s.mu.Lock()
+	s.cfg.Email = newEmail
+	cfgCopy := s.cfg
+	s.mu.Unlock()
+
+	if err := s.cfgStore.Save(cfgCopy); err != nil {
+		http.Error(w, "failed to save configuration", http.StatusInternalServerError)
+		return
+	}
+
+	if s.onEmail != nil {
+		s.onEmail(newEmail)
+	}
+
+	s.finishOnboarding()
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func emailDataFromConfig(e config.Email) emailData {
+	data := emailData{
+		SMTPHost:    e.SMTPHost,
+		Username:    e.Username,
+		From:        e.From,
+		To:          e.To,
+		HasPassword: e.Password != "",
+	}
+	if e.SMTPPort != 0 {
+		data.SMTPPort = strconv.Itoa(e.SMTPPort)
+	}
+	return data
 }
 
 func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
