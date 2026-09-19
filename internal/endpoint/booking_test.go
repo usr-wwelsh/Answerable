@@ -70,12 +70,12 @@ func TestBookWithoutWebhookQueuesRequestAndOmitsJargon(t *testing.T) {
 	}
 }
 
-func TestBookWithWebhookNotifiesIt(t *testing.T) {
-	notified := make(chan string, 1)
+func TestBookWithWebhookNotifiesItWithHyperlinkedConfirmDeny(t *testing.T) {
+	notified := make(chan map[string]any, 1)
 	hookSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]string
+		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
-		notified <- body["content"]
+		notified <- body
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer hookSrv.Close()
@@ -89,12 +89,33 @@ func TestBookWithWebhookNotifiesIt(t *testing.T) {
 	}
 
 	select {
-	case content := <-notified:
+	case body := <-notified:
+		content, _ := body["content"].(string)
 		if !strings.Contains(content, "Jane Doe") {
 			t.Errorf("webhook content missing name: %q", content)
 		}
-		if !strings.Contains(content, "/confirm") || !strings.Contains(content, "/deny") {
-			t.Errorf("webhook content missing confirm/deny links: %q", content)
+		if strings.Contains(content, "/confirm") || strings.Contains(content, "/deny") {
+			t.Errorf("Discord content should carry hyperlinked confirm/deny via the embed, not raw links: %q", content)
+		}
+
+		text, _ := body["text"].(string)
+		if !strings.Contains(text, "|Confirm>") || !strings.Contains(text, "|Deny>") {
+			t.Errorf("Slack text missing masked confirm/deny links: %q", text)
+		}
+
+		embeds, _ := body["embeds"].([]any)
+		if len(embeds) == 0 {
+			t.Fatal("expected a Discord embed carrying the confirm/deny links")
+		}
+		embed, _ := embeds[0].(map[string]any)
+		fields, _ := embed["fields"].([]any)
+		if len(fields) == 0 {
+			t.Fatal("expected an embed field with confirm/deny links")
+		}
+		field, _ := fields[0].(map[string]any)
+		value, _ := field["value"].(string)
+		if !strings.Contains(value, "/confirm") || !strings.Contains(value, "/deny") {
+			t.Errorf("embed field missing confirm/deny links: %q", value)
 		}
 	default:
 		t.Fatal("webhook was not notified")
@@ -243,7 +264,7 @@ func TestBookRejectsMissingRequiredFields(t *testing.T) {
 	}
 }
 
-func TestConfirmAndDenyRoutesResolveTokens(t *testing.T) {
+func TestConfirmGetRendersPageWithoutMutating(t *testing.T) {
 	store := openTestBookingStore(t)
 	srv := New(testProvider(), store, "")
 
@@ -255,11 +276,39 @@ func TestConfirmAndDenyRoutesResolveTokens(t *testing.T) {
 	}
 	token := list[0].Token
 
+	// A GET must be safe to fetch without effect, since chat apps and
+	// email clients auto-fetch links to build previews before any human
+	// clicks them.
 	confirmReq := httptest.NewRequest(http.MethodGet, "/confirm?token="+token, nil)
 	confirmRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(confirmRec, confirmReq)
 	if confirmRec.Code != http.StatusOK {
-		t.Fatalf("confirm status = %d, want 200, body=%s", confirmRec.Code, confirmRec.Body.String())
+		t.Fatalf("GET /confirm status = %d, want 200, body=%s", confirmRec.Code, confirmRec.Body.String())
+	}
+
+	list, _ = store.List()
+	if list[0].Status != booking.StatusPending {
+		t.Errorf("GET must not mutate status; got %q, want pending", list[0].Status)
+	}
+}
+
+func TestConfirmAndDenyPostResolveTokens(t *testing.T) {
+	store := openTestBookingStore(t)
+	srv := New(testProvider(), store, "")
+
+	postBook(t, srv, `{"name":"Jane Doe","contact":"555-0100","need":"bed for two tonight"}`)
+
+	list, _ := store.List()
+	if len(list) != 1 {
+		t.Fatalf("expected 1 queued request, got %d", len(list))
+	}
+	token := list[0].Token
+
+	confirmReq := httptest.NewRequest(http.MethodPost, "/confirm?token="+token, nil)
+	confirmRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(confirmRec, confirmReq)
+	if confirmRec.Code != http.StatusOK {
+		t.Fatalf("POST /confirm status = %d, want 200, body=%s", confirmRec.Code, confirmRec.Body.String())
 	}
 
 	list, _ = store.List()
@@ -311,7 +360,7 @@ func TestStatusRouteCannotResolveTheRequestItself(t *testing.T) {
 	var resp map[string]string
 	json.Unmarshal(rec.Body.Bytes(), &resp)
 
-	req := httptest.NewRequest(http.MethodGet, "/confirm?token="+resp["statusToken"], nil)
+	req := httptest.NewRequest(http.MethodPost, "/confirm?token="+resp["statusToken"], nil)
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, req)
 
@@ -337,7 +386,7 @@ func TestConfirmRejectsUnknownTokenWithBadRequest(t *testing.T) {
 	store := openTestBookingStore(t)
 	srv := New(testProvider(), store, "")
 
-	req := httptest.NewRequest(http.MethodGet, "/confirm?token=bogus", nil)
+	req := httptest.NewRequest(http.MethodPost, "/confirm?token=bogus", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 

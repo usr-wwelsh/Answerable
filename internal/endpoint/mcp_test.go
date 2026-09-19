@@ -124,11 +124,11 @@ func TestMCPBookIntakeQueuesRequest(t *testing.T) {
 }
 
 func TestMCPBookIntakeNotifiesWebhookWithLiveConfirmLinks(t *testing.T) {
-	notified := make(chan string, 1)
+	notified := make(chan map[string]any, 1)
 	hookSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]string
+		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
-		notified <- body["content"]
+		notified <- body
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer hookSrv.Close()
@@ -149,9 +149,20 @@ func TestMCPBookIntakeNotifiesWebhookWithLiveConfirmLinks(t *testing.T) {
 	}
 
 	select {
-	case content := <-notified:
-		if !strings.Contains(content, "/confirm") || !strings.Contains(content, "/deny") {
-			t.Errorf("webhook content missing confirm/deny links: %q", content)
+	case body := <-notified:
+		embeds, _ := body["embeds"].([]any)
+		if len(embeds) == 0 {
+			t.Fatal("expected an embed carrying the confirm/deny links")
+		}
+		embed, _ := embeds[0].(map[string]any)
+		fields, _ := embed["fields"].([]any)
+		if len(fields) == 0 {
+			t.Fatal("expected an embed field with confirm/deny links")
+		}
+		field, _ := fields[0].(map[string]any)
+		value, _ := field["value"].(string)
+		if !strings.Contains(value, "/confirm") || !strings.Contains(value, "/deny") {
+			t.Errorf("embed field missing confirm/deny links: %q", value)
 		}
 	default:
 		t.Fatal("webhook was not notified")

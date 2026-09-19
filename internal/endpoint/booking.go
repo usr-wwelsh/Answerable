@@ -53,18 +53,22 @@ func (s *Server) bookIntake(baseURL, name, contact, need string) (booking.Reques
 
 	confirmURL := baseURL + "/confirm?token=" + req.Token
 	denyURL := baseURL + "/deny?token=" + req.Token
-	notifyMsg := fmt.Sprintf(
-		"New intake request from %s (%s): %s\nConfirm: %s\nDeny: %s",
-		req.Name, req.Contact, req.Need, confirmURL, denyURL,
-	)
 
 	switch {
 	case s.currentEmail().To != "":
-		if err := email.Send(s.currentEmail(), "New intake request", notifyMsg); err == nil {
+		emailBody := fmt.Sprintf(
+			"New intake request from %s (%s): %s\nConfirm: %s\nDeny: %s",
+			req.Name, req.Contact, req.Need, confirmURL, denyURL,
+		)
+		if err := email.Send(s.currentEmail(), "New intake request", emailBody); err == nil {
 			message = "Your request has been sent to the provider. They'll confirm shortly."
 		}
 	case s.currentWebhook() != "":
-		if err := webhook.Notify(s.currentWebhook(), notifyMsg); err == nil {
+		n := webhook.Notification{
+			Name: req.Name, Contact: req.Contact, Need: req.Need,
+			ConfirmURL: confirmURL, DenyURL: denyURL,
+		}
+		if err := webhook.Notify(s.currentWebhook(), n); err == nil {
 			message = "Your request has been sent to the provider. They'll confirm shortly."
 		}
 	}
@@ -124,24 +128,46 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleConfirm(w http.ResponseWriter, r *http.Request) {
-	s.resolveToken(w, r, s.store.Confirm, "Request confirmed.")
+	s.resolveToken(w, r, s.store.Confirm, "Confirm", "Request confirmed.")
 }
 
 func (s *Server) handleDeny(w http.ResponseWriter, r *http.Request) {
-	s.resolveToken(w, r, s.store.Deny, "Request denied.")
+	s.resolveToken(w, r, s.store.Deny, "Deny", "Request denied.")
 }
 
-func (s *Server) resolveToken(w http.ResponseWriter, r *http.Request, resolve func(string) (booking.Request, error), okMessage string) {
+const actionPageHTML = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>%[1]s intake request</title></head>
+<body>
+<h1>%[1]s this intake request?</h1>
+<form method="POST">
+<button type="submit">%[1]s</button>
+</form>
+</body></html>`
+
+// resolveToken serves both the human-facing confirm/deny link and its
+// action. GET only renders a page — it must never mutate state, since
+// chat clients (Discord, Slack, Teams) and email scanners fetch links to
+// build previews, and a mutating GET would let that preview silently
+// confirm or deny the request before a human ever sees it. Only a POST,
+// from the page's own button, actually resolves the token.
+func (s *Server) resolveToken(w http.ResponseWriter, r *http.Request, resolve func(string) (booking.Request, error), label, okMessage string) {
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		http.Error(w, "missing token", http.StatusBadRequest)
 		return
 	}
 
-	if _, err := resolve(token); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	switch r.Method {
+	case http.MethodGet:
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, actionPageHTML, label)
+	case http.MethodPost:
+		if _, err := resolve(token); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Write([]byte(okMessage))
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
-
-	w.Write([]byte(okMessage))
 }
