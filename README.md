@@ -23,7 +23,7 @@ Answerable makes any website ready for the agent-native web:
 
 - Serves the latest facts from the documents your business already uses — to everyone's AI agents
 - Serves MCP so AI can securely and traceably interact with your website (e.g. book an appointment)
-- Speaks webhooks and SMTP
+- Speaks webhooks and SMTP — so your Slack/Teams/Discord and company email see agent requests coming in real time
 - Ships a web UI and CLI, so it fits your IaC scripts
 - Does all of this automatically
 
