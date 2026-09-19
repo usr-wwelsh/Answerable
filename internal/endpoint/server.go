@@ -20,10 +20,19 @@ type Server struct {
 	store      *booking.Store
 	webhookURL string
 	emailCfg   email.Config
+	site       http.Handler
 }
 
 func New(p facts.Provider, store *booking.Store, webhookURL string) *Server {
 	return &Server{provider: p, store: store, webhookURL: webhookURL}
+}
+
+// SetSite installs the handler for the provider's own site — everything
+// that isn't one of Answerable's own discovery/booking routes. When set,
+// it takes over "/" entirely, including the exact root path that
+// otherwise falls to handleIndex.
+func (s *Server) SetSite(h http.Handler) {
+	s.site = h
 }
 
 // UpdateProvider replaces the served provider facts, e.g. after the admin
@@ -68,7 +77,11 @@ func (s *Server) currentEmail() email.Config {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/{$}", s.handleIndex)
+	if s.site != nil {
+		mux.Handle("/", s.site)
+	} else {
+		mux.HandleFunc("/{$}", s.handleIndex)
+	}
 	mux.HandleFunc("/robots.txt", s.handleRobots)
 	mux.HandleFunc("/facts.jsonld", s.handleFacts)
 	mux.HandleFunc("/.well-known/agent.json", s.handleAgentCard)

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/usr-wwelsh/answerable/internal/endpoint"
 	"github.com/usr-wwelsh/answerable/internal/facts"
 	"github.com/usr-wwelsh/answerable/internal/parser"
+	"github.com/usr-wwelsh/answerable/internal/siteproxy"
 )
 
 func main() {
@@ -27,7 +29,13 @@ func main() {
 	adminPort := flag.String("admin-port", "8090", "admin webui port")
 	dbPath := flag.String("db", "answerable.db", "path to the local database (booking queue + config)")
 	noBrowser := flag.Bool("no-browser", false, "don't open the admin webui in a browser on startup")
+	siteDir := flag.String("site-dir", "", "serve the provider's site from this directory, injecting agent-discovery <link> tags into every HTML page (mutually exclusive with -upstream)")
+	upstream := flag.String("upstream", "", "reverse-proxy to the provider's existing site at this URL, injecting agent-discovery <link> tags into every HTML response (mutually exclusive with -site-dir)")
 	flag.Parse()
+
+	if *siteDir != "" && *upstream != "" {
+		log.Fatal("-site-dir and -upstream are mutually exclusive")
+	}
 
 	cfgStore, err := config.Open(*dbPath)
 	if err != nil {
@@ -44,6 +52,17 @@ func main() {
 	seedIfUnconfigured(cfgStore, *file, *webhookURL)
 
 	srv := endpoint.New(facts.Provider{}, bookStore, "")
+
+	switch {
+	case *siteDir != "":
+		srv.SetSite(siteproxy.FileServer(*siteDir, siteproxy.DefaultLinks))
+	case *upstream != "":
+		u, err := url.Parse(*upstream)
+		if err != nil {
+			log.Fatalf("invalid -upstream URL: %v", err)
+		}
+		srv.SetSite(siteproxy.ReverseProxy(u, siteproxy.DefaultLinks))
+	}
 
 	adminSrv, err := admin.New(admin.Deps{
 		ConfigStore:  cfgStore,

@@ -1,19 +1,8 @@
 :{$PORT:80} {
-	# Answerable owns these paths no matter what serves the rest of the
-	# domain. Leave this block alone when bolting Answerable onto an
-	# existing site.
-	@answerable path /llms.txt /robots.txt /facts.jsonld /book /status /confirm /deny /mcp /.well-known/agent.json /.well-known/mcp.json
-
-	handle @answerable {
-		reverse_proxy localhost:{$ANSWERABLE_PORT:8081}
-	}
-
-	# Everything else goes to the existing site. This demo serves static
-	# files from /srv/site; to bolt Answerable onto a Node app, WordPress,
-	# or anything else, replace this block with:
-	#   reverse_proxy localhost:<your site's port>
-	handle {
-		root * /srv/site
-		file_server
-	}
+	# Answerable is the single upstream for everything: its own
+	# discovery/booking routes, and the provider's site (served or
+	# reverse-proxied by Answerable itself via -site-dir/-upstream), which
+	# gets agent-discovery <link> tags injected into every HTML page. Caddy
+	# here only terminates the dynamic $PORT Railway assigns.
+	reverse_proxy localhost:{$ANSWERABLE_PORT:8081}
 }

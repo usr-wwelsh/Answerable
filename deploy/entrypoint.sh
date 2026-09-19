@@ -19,6 +19,7 @@ fi
 	-admin-bind 0.0.0.0 \
 	-admin-port "$ANSWERABLE_ADMIN_PORT" \
 	-db /data/answerable.db \
+	-site-dir /srv/site \
 	-no-browser &
 
 exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
