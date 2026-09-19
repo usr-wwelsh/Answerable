@@ -1,13 +1,16 @@
 package endpoint
 
 import (
+	"bufio"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/usr-wwelsh/answerable/internal/booking"
+	"github.com/usr-wwelsh/answerable/internal/email"
 )
 
 func openTestBookingStore(t *testing.T) *booking.Store {
@@ -95,6 +98,138 @@ func TestBookWithWebhookNotifiesIt(t *testing.T) {
 		}
 	default:
 		t.Fatal("webhook was not notified")
+	}
+}
+
+// fakeUnauthSMTPServer accepts a single connection and echoes back a
+// no-auth-required conversation, capturing the DATA body. It's enough to
+// prove bookIntake wires an email-configured Server through to a real SMTP
+// send, without needing net/smtp AUTH plumbing.
+func fakeUnauthSMTPServer(t *testing.T) (host string, port int, bodies chan string) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	bodies = make(chan string, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		r := bufio.NewReader(conn)
+		w := bufio.NewWriter(conn)
+		writeLine := func(s string) { w.WriteString(s + "\r\n"); w.Flush() }
+		writeLine("220 fake.local ESMTP ready")
+
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			upper := strings.ToUpper(strings.TrimRight(line, "\r\n"))
+			switch {
+			case strings.HasPrefix(upper, "EHLO"):
+				writeLine("250 fake.local")
+			case strings.HasPrefix(upper, "MAIL FROM:"):
+				writeLine("250 2.1.0 OK")
+			case strings.HasPrefix(upper, "RCPT TO:"):
+				writeLine("250 2.1.5 OK")
+			case strings.HasPrefix(upper, "DATA"):
+				writeLine("354 go ahead")
+				var body strings.Builder
+				for {
+					dataLine, err := r.ReadString('\n')
+					if err != nil {
+						return
+					}
+					trimmed := strings.TrimRight(dataLine, "\r\n")
+					if trimmed == "." {
+						break
+					}
+					body.WriteString(strings.TrimPrefix(trimmed, "."))
+					body.WriteString("\n")
+				}
+				bodies <- body.String()
+				writeLine("250 2.0.0 OK")
+			case strings.HasPrefix(upper, "QUIT"):
+				writeLine("221 2.0.0 Bye")
+				return
+			default:
+				writeLine("500 unrecognized command")
+			}
+		}
+	}()
+
+	addr := ln.Addr().(*net.TCPAddr)
+	return addr.IP.String(), addr.Port, bodies
+}
+
+func TestBookWithEmailNotifiesIt(t *testing.T) {
+	host, port, bodies := fakeUnauthSMTPServer(t)
+
+	store := openTestBookingStore(t)
+	srv := New(testProvider(), store, "")
+	srv.UpdateEmail(email.Config{
+		SMTPHost: host,
+		SMTPPort: port,
+		From:     "shelter@example.com",
+		To:       "oncall@example.com",
+	})
+
+	rec := postBook(t, srv, `{"name":"Jane Doe","contact":"555-0100","need":"bed for two tonight"}`)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202", rec.Code)
+	}
+
+	select {
+	case body := <-bodies:
+		if !strings.Contains(body, "Jane Doe") {
+			t.Errorf("email body missing name: %q", body)
+		}
+		if !strings.Contains(body, "/confirm") || !strings.Contains(body, "/deny") {
+			t.Errorf("email body missing confirm/deny links: %q", body)
+		}
+	default:
+		t.Fatal("email was not sent")
+	}
+}
+
+func TestBookPrefersEmailOverWebhookWhenBothConfigured(t *testing.T) {
+	host, port, bodies := fakeUnauthSMTPServer(t)
+
+	webhookCalled := false
+	hookSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		webhookCalled = true
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer hookSrv.Close()
+
+	store := openTestBookingStore(t)
+	srv := New(testProvider(), store, hookSrv.URL)
+	srv.UpdateEmail(email.Config{
+		SMTPHost: host,
+		SMTPPort: port,
+		From:     "shelter@example.com",
+		To:       "oncall@example.com",
+	})
+
+	rec := postBook(t, srv, `{"name":"Jane Doe","contact":"555-0100","need":"bed for two tonight"}`)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202", rec.Code)
+	}
+
+	select {
+	case <-bodies:
+	default:
+		t.Fatal("email was not sent")
+	}
+	if webhookCalled {
+		t.Error("webhook was notified even though email is configured; expected email to take precedence")
 	}
 }
 

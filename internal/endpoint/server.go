@@ -8,6 +8,7 @@ import (
 
 	"github.com/usr-wwelsh/answerable/internal/agentcard"
 	"github.com/usr-wwelsh/answerable/internal/booking"
+	"github.com/usr-wwelsh/answerable/internal/email"
 	"github.com/usr-wwelsh/answerable/internal/facts"
 	"github.com/usr-wwelsh/answerable/internal/jsonld"
 	"github.com/usr-wwelsh/answerable/internal/llmstxt"
@@ -18,6 +19,7 @@ type Server struct {
 	provider   facts.Provider
 	store      *booking.Store
 	webhookURL string
+	emailCfg   email.Config
 }
 
 func New(p facts.Provider, store *booking.Store, webhookURL string) *Server {
@@ -39,6 +41,13 @@ func (s *Server) UpdateWebhook(url string) {
 	s.webhookURL = url
 }
 
+// UpdateEmail replaces the booking-notification SMTP configuration.
+func (s *Server) UpdateEmail(cfg email.Config) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.emailCfg = cfg
+}
+
 func (s *Server) currentProvider() facts.Provider {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -49,6 +58,12 @@ func (s *Server) currentWebhook() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.webhookURL
+}
+
+func (s *Server) currentEmail() email.Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.emailCfg
 }
 
 func (s *Server) Handler() http.Handler {

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/usr-wwelsh/answerable/internal/booking"
+	"github.com/usr-wwelsh/answerable/internal/email"
 	"github.com/usr-wwelsh/answerable/internal/webhook"
 )
 
@@ -50,14 +51,20 @@ func (s *Server) bookIntake(baseURL, name, contact, need string) (booking.Reques
 
 	message := "This request has been queued for provider review. If this is urgent, contacting them by phone directly may be faster."
 
-	if webhookURL := s.currentWebhook(); webhookURL != "" {
-		confirmURL := baseURL + "/confirm?token=" + req.Token
-		denyURL := baseURL + "/deny?token=" + req.Token
-		notifyMsg := fmt.Sprintf(
-			"New intake request from %s (%s): %s\nConfirm: %s\nDeny: %s",
-			req.Name, req.Contact, req.Need, confirmURL, denyURL,
-		)
-		if err := webhook.Notify(webhookURL, notifyMsg); err == nil {
+	confirmURL := baseURL + "/confirm?token=" + req.Token
+	denyURL := baseURL + "/deny?token=" + req.Token
+	notifyMsg := fmt.Sprintf(
+		"New intake request from %s (%s): %s\nConfirm: %s\nDeny: %s",
+		req.Name, req.Contact, req.Need, confirmURL, denyURL,
+	)
+
+	switch {
+	case s.currentEmail().To != "":
+		if err := email.Send(s.currentEmail(), "New intake request", notifyMsg); err == nil {
+			message = "Your request has been sent to the provider. They'll confirm shortly."
+		}
+	case s.currentWebhook() != "":
+		if err := webhook.Notify(s.currentWebhook(), notifyMsg); err == nil {
 			message = "Your request has been sent to the provider. They'll confirm shortly."
 		}
 	}
