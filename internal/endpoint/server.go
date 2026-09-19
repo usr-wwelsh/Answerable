@@ -113,7 +113,7 @@ func withDiscoveryLinks(next http.Handler) http.Handler {
 
 func baseURL(r *http.Request) string {
 	scheme := "http"
-	if r.TLS != nil {
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		scheme = "https"
 	}
 	return scheme + "://" + r.Host

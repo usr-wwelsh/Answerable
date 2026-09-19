@@ -46,6 +46,22 @@ func TestFactsRouteServesJSONLD(t *testing.T) {
 	}
 }
 
+func TestFactsRouteUsesHTTPSWhenForwardedByProxy(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/facts.jsonld", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if strings.Contains(rec.Body.String(), "http://") {
+		t.Errorf("body contains insecure http:// link despite X-Forwarded-Proto: https: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "https://") {
+		t.Errorf("body missing https:// link: %s", rec.Body.String())
+	}
+}
+
 func TestAgentCardRouteServesJSON(t *testing.T) {
 	srv := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/agent.json", nil)
