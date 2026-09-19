@@ -19,10 +19,20 @@ type Source struct {
 	Value string
 }
 
+type Email struct {
+	SMTPHost string
+	SMTPPort int
+	Username string
+	Password string
+	From     string
+	To       string
+}
+
 type Config struct {
 	Source          Source
 	RefreshInterval time.Duration
 	WebhookURL      string
+	Email           Email
 	SourceLabel     string
 	SourceUpdatedAt time.Time
 }
@@ -60,6 +70,19 @@ func Open(path string) (*Store, error) {
 	if err := addColumnIfMissing(db, "provider_config", "source_updated_at_unix", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		db.Close()
 		return nil, err
+	}
+	for col, decl := range map[string]string{
+		"email_smtp_host": "TEXT NOT NULL DEFAULT ''",
+		"email_smtp_port": "INTEGER NOT NULL DEFAULT 0",
+		"email_username":  "TEXT NOT NULL DEFAULT ''",
+		"email_password":  "TEXT NOT NULL DEFAULT ''",
+		"email_from":      "TEXT NOT NULL DEFAULT ''",
+		"email_to":        "TEXT NOT NULL DEFAULT ''",
+	} {
+		if err := addColumnIfMissing(db, "provider_config", col, decl); err != nil {
+			db.Close()
+			return nil, err
+		}
 	}
 
 	return &Store{db: db}, nil
@@ -101,13 +124,21 @@ func (s *Store) Close() error {
 
 func (s *Store) Load() (Config, bool, error) {
 	row := s.db.QueryRow(`
-		SELECT source_kind, source_value, refresh_interval_seconds, webhook_url, source_label, source_updated_at_unix
+		SELECT source_kind, source_value, refresh_interval_seconds, webhook_url,
+			email_smtp_host, email_smtp_port, email_username, email_password, email_from, email_to,
+			source_label, source_updated_at_unix
 		FROM provider_config WHERE id = 1
 	`)
 
 	var kind, value, webhookURL, label string
+	var emailHost, emailUser, emailPass, emailFrom, emailTo string
+	var emailPort int
 	var seconds, updatedAtUnix int64
-	if err := row.Scan(&kind, &value, &seconds, &webhookURL, &label, &updatedAtUnix); err != nil {
+	if err := row.Scan(
+		&kind, &value, &seconds, &webhookURL,
+		&emailHost, &emailPort, &emailUser, &emailPass, &emailFrom, &emailTo,
+		&label, &updatedAtUnix,
+	); err != nil {
 		if err == sql.ErrNoRows {
 			return Config{}, false, nil
 		}
@@ -118,6 +149,14 @@ func (s *Store) Load() (Config, bool, error) {
 		Source:          Source{Kind: SourceKind(kind), Value: value},
 		RefreshInterval: time.Duration(seconds) * time.Second,
 		WebhookURL:      webhookURL,
+		Email: Email{
+			SMTPHost: emailHost,
+			SMTPPort: emailPort,
+			Username: emailUser,
+			Password: emailPass,
+			From:     emailFrom,
+			To:       emailTo,
+		},
 		SourceLabel:     label,
 		SourceUpdatedAt: unixToTime(updatedAtUnix),
 	}
@@ -126,18 +165,29 @@ func (s *Store) Load() (Config, bool, error) {
 
 func (s *Store) Save(cfg Config) error {
 	_, err := s.db.Exec(`
-		INSERT INTO provider_config (id, source_kind, source_value, refresh_interval_seconds, webhook_url, source_label, source_updated_at_unix)
-		VALUES (1, ?, ?, ?, ?, ?, ?)
+		INSERT INTO provider_config (
+			id, source_kind, source_value, refresh_interval_seconds, webhook_url,
+			email_smtp_host, email_smtp_port, email_username, email_password, email_from, email_to,
+			source_label, source_updated_at_unix
+		)
+		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			source_kind = excluded.source_kind,
 			source_value = excluded.source_value,
 			refresh_interval_seconds = excluded.refresh_interval_seconds,
 			webhook_url = excluded.webhook_url,
+			email_smtp_host = excluded.email_smtp_host,
+			email_smtp_port = excluded.email_smtp_port,
+			email_username = excluded.email_username,
+			email_password = excluded.email_password,
+			email_from = excluded.email_from,
+			email_to = excluded.email_to,
 			source_label = excluded.source_label,
 			source_updated_at_unix = excluded.source_updated_at_unix
 	`,
 		string(cfg.Source.Kind), cfg.Source.Value,
 		int64(cfg.RefreshInterval/time.Second), cfg.WebhookURL,
+		cfg.Email.SMTPHost, cfg.Email.SMTPPort, cfg.Email.Username, cfg.Email.Password, cfg.Email.From, cfg.Email.To,
 		cfg.SourceLabel, timeToUnix(cfg.SourceUpdatedAt),
 	)
 	return err

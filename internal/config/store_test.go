@@ -27,6 +27,14 @@ func TestSaveThenLoadRoundTrips(t *testing.T) {
 		Source:          Source{Kind: SourceURL, Value: "https://example.com/sheet.csv"},
 		RefreshInterval: 5 * time.Minute,
 		WebhookURL:      "https://discord.com/api/webhooks/x",
+		Email: Email{
+			SMTPHost: "smtp.example.com",
+			SMTPPort: 587,
+			Username: "shelter@example.com",
+			Password: "app-password",
+			From:     "shelter@example.com",
+			To:       "oncall@example.com",
+		},
 		SourceLabel:     "sheet.csv",
 		SourceUpdatedAt: time.Now(),
 	}
@@ -142,6 +150,63 @@ func TestOpenMigratesPreExistingSchemaMissingNewColumns(t *testing.T) {
 	}
 }
 
+func TestOpenMigratesPreExistingSchemaMissingEmailColumns(t *testing.T) {
+	path := t.TempDir() + "/answerable.db"
+
+	legacy, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	_, err = legacy.Exec(`
+		CREATE TABLE provider_config (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			source_kind TEXT NOT NULL,
+			source_value TEXT NOT NULL,
+			refresh_interval_seconds INTEGER NOT NULL,
+			webhook_url TEXT NOT NULL,
+			source_label TEXT NOT NULL DEFAULT '',
+			source_updated_at_unix INTEGER NOT NULL DEFAULT 0
+		)
+	`)
+	if err != nil {
+		t.Fatalf("create legacy table: %v", err)
+	}
+	_, err = legacy.Exec(
+		`INSERT INTO provider_config (id, source_kind, source_value, refresh_interval_seconds, webhook_url, source_label, source_updated_at_unix) VALUES (1, ?, ?, ?, ?, ?, ?)`,
+		"file", "/data/old.csv", 0, "", "old.csv", 0,
+	)
+	if err != nil {
+		t.Fatalf("seed legacy row: %v", err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatalf("close legacy db: %v", err)
+	}
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open on legacy schema: %v", err)
+	}
+	defer s.Close()
+
+	got, ok, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load on legacy schema: %v", err)
+	}
+	if !ok || got.Source.Value != "/data/old.csv" {
+		t.Fatalf("Load = %+v, ok=%v, want the pre-existing row", got, ok)
+	}
+	if got.Email != (Email{}) {
+		t.Errorf("Email = %+v, want zero value on legacy row", got.Email)
+	}
+
+	if err := s.Save(Config{
+		Source: Source{Kind: SourceFile, Value: "/data/new.csv"},
+		Email:  Email{SMTPHost: "smtp.example.com", SMTPPort: 587, To: "oncall@example.com"},
+	}); err != nil {
+		t.Fatalf("Save after migration: %v", err)
+	}
+}
+
 func assertConfigsEqual(t *testing.T, got, want Config) {
 	t.Helper()
 	if got.Source != want.Source {
@@ -152,6 +217,9 @@ func assertConfigsEqual(t *testing.T, got, want Config) {
 	}
 	if got.WebhookURL != want.WebhookURL {
 		t.Errorf("WebhookURL = %q, want %q", got.WebhookURL, want.WebhookURL)
+	}
+	if got.Email != want.Email {
+		t.Errorf("Email = %+v, want %+v", got.Email, want.Email)
 	}
 	if got.SourceLabel != want.SourceLabel {
 		t.Errorf("SourceLabel = %q, want %q", got.SourceLabel, want.SourceLabel)
