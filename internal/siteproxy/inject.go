@@ -25,7 +25,6 @@ var DefaultLinks = []DiscoveryLink{
 	{"agent-card", "/.well-known/agent.json"},
 	{"mcp-manifest", "/.well-known/mcp.json"},
 	{"mcp-server", "/mcp"},
-	{"facts-html", "/facts.html"},
 }
 
 var headOpenTag = regexp.MustCompile(`(?i)<head[^>]*>`)
