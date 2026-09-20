@@ -60,7 +60,19 @@ func (f *Fetcher) Fetch(rawURL string) (parser.Record, error) {
 		return parser.ParseText(bytes.NewReader(body))
 	case FormatPDF:
 		return parser.ParsePDF(bytes.NewReader(body))
+	case FormatJSON:
+		return parser.ParseJSON(bytes.NewReader(body))
+	case FormatHTML:
+		return parser.ParseHTML(bytes.NewReader(body))
+	case FormatXML:
+		return parser.ParseXML(bytes.NewReader(body))
+	case FormatDOCX:
+		return parser.ParseDOCX(bytes.NewReader(body))
+	case FormatPPTX:
+		return parser.ParsePPTX(bytes.NewReader(body))
+	case FormatXLSX:
+		return parser.ParseXLSX(bytes.NewReader(body))
 	default:
-		return nil, fmt.Errorf("fetch %s: could not determine format (expected CSV, text/markdown, or PDF)", rawURL)
+		return nil, fmt.Errorf("fetch %s: could not determine format (expected CSV, text/markdown, PDF, JSON, HTML, XML, DOCX, PPTX, or XLSX)", rawURL)
 	}
 }

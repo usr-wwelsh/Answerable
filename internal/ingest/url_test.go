@@ -30,6 +30,13 @@ func TestDetectFormatByExtension(t *testing.T) {
 		"https://example.com/blurb.md":    FormatText,
 		"https://example.com/blurb.txt":   FormatText,
 		"https://example.com/handout.pdf": FormatPDF,
+		"https://example.com/data.json":   FormatJSON,
+		"https://example.com/page.html":   FormatHTML,
+		"https://example.com/page.htm":    FormatHTML,
+		"https://example.com/feed.xml":    FormatXML,
+		"https://example.com/doc.docx":    FormatDOCX,
+		"https://example.com/deck.pptx":   FormatPPTX,
+		"https://example.com/book.xlsx":   FormatXLSX,
 	}
 	for u, want := range cases {
 		if got := DetectFormat(u, ""); got != want {
@@ -61,6 +68,13 @@ func TestDetectFormatByContentType(t *testing.T) {
 		{"application/pdf", FormatPDF},
 		{"text/plain", FormatText},
 		{"text/markdown", FormatText},
+		{"application/json", FormatJSON},
+		{"text/html", FormatHTML},
+		{"application/xml", FormatXML},
+		{"text/xml", FormatXML},
+		{"application/vnd.openxmlformats-officedocument.wordprocessingml.document", FormatDOCX},
+		{"application/vnd.openxmlformats-officedocument.presentationml.presentation", FormatPPTX},
+		{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", FormatXLSX},
 	}
 	for _, c := range cases {
 		if got := DetectFormat("https://example.com/download", c.contentType); got != c.want {

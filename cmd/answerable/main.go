@@ -22,7 +22,7 @@ import (
 )
 
 func main() {
-	file := flag.String("file", "", "optional: path to a CSV/md/txt/pdf fact source to pre-seed on first run")
+	file := flag.String("file", "", "optional: path to a fact source to pre-seed on first run (csv/md/txt/pdf/json/html/xml/docx/pptx/xlsx)")
 	webhookURL := flag.String("webhook", "", "optional: webhook URL to pre-seed on first run")
 	port := flag.String("port", "8081", "public endpoint port")
 	adminBind := flag.String("admin-bind", "127.0.0.1", "admin webui bind address; widening past loopback requires ANSWERABLE_ADMIN_PASSWORD")

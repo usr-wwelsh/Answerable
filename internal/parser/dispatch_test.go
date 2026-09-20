@@ -28,8 +28,34 @@ func TestParseByExtensionDispatchesText(t *testing.T) {
 }
 
 func TestParseByExtensionRejectsUnsupported(t *testing.T) {
-	if _, err := ParseByExtension(".docx", strings.NewReader("")); err == nil {
+	if _, err := ParseByExtension(".rtf", strings.NewReader("")); err == nil {
 		t.Fatal("expected error for unsupported extension")
+	}
+}
+
+func TestParseByExtensionDispatchesNewFormats(t *testing.T) {
+	rec, err := ParseByExtension(".json", strings.NewReader(`{"name": "Test Shelter"}`))
+	if err != nil {
+		t.Fatalf("ParseByExtension(.json): %v", err)
+	}
+	if rec["name"] != "Test Shelter" {
+		t.Fatalf("rec = %+v", rec)
+	}
+
+	rec, err = ParseByExtension(".html", strings.NewReader(`<p>Name: Test Shelter</p>`))
+	if err != nil {
+		t.Fatalf("ParseByExtension(.html): %v", err)
+	}
+	if rec["name"] != "Test Shelter" {
+		t.Fatalf("rec = %+v", rec)
+	}
+
+	rec, err = ParseByExtension(".xml", strings.NewReader(`<s>Name: Test Shelter</s>`))
+	if err != nil {
+		t.Fatalf("ParseByExtension(.xml): %v", err)
+	}
+	if rec["name"] != "Test Shelter" {
+		t.Fatalf("rec = %+v", rec)
 	}
 }
 

@@ -14,6 +14,12 @@ const (
 	FormatCSV  Format = "csv"
 	FormatText Format = "text"
 	FormatPDF  Format = "pdf"
+	FormatJSON Format = "json"
+	FormatHTML Format = "html"
+	FormatXML  Format = "xml"
+	FormatDOCX Format = "docx"
+	FormatPPTX Format = "pptx"
+	FormatXLSX Format = "xlsx"
 )
 
 var allowedSchemes = map[string]bool{
@@ -49,6 +55,18 @@ func DetectFormat(raw, contentType string) Format {
 			return FormatText
 		case ".pdf":
 			return FormatPDF
+		case ".json":
+			return FormatJSON
+		case ".html", ".htm":
+			return FormatHTML
+		case ".xml":
+			return FormatXML
+		case ".docx":
+			return FormatDOCX
+		case ".pptx":
+			return FormatPPTX
+		case ".xlsx":
+			return FormatXLSX
 		}
 
 		q := u.Query()
@@ -71,6 +89,18 @@ func DetectFormat(raw, contentType string) Format {
 		return FormatPDF
 	case "text/plain", "text/markdown":
 		return FormatText
+	case "application/json":
+		return FormatJSON
+	case "text/html":
+		return FormatHTML
+	case "text/xml", "application/xml":
+		return FormatXML
+	case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+		return FormatDOCX
+	case "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+		return FormatPPTX
+	case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+		return FormatXLSX
 	}
 
 	return ""
