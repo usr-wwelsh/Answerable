@@ -248,6 +248,59 @@ func TestUnknownPathStill404sInsteadOfClaimingRoot(t *testing.T) {
 	}
 }
 
+func TestNotFoundResponseIncludesDiscoveryHint(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/beds", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "/llms.txt") {
+		t.Errorf("404 body missing discovery hint: %s", rec.Body.String())
+	}
+}
+
+func TestNotFoundResponseFromSiteIncludesDiscoveryHint(t *testing.T) {
+	srv := newTestServer(t)
+	srv.SetSite(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/beds", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "/llms.txt") {
+		t.Errorf("404 body missing discovery hint: %s", rec.Body.String())
+	}
+}
+
+func TestNotFoundHTMLPageFromSiteIsLeftIntact(t *testing.T) {
+	srv := newTestServer(t)
+	srv.SetSite(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`<html><head></head><body>Provider's own branded 404<a href="/llms.txt"></a></body></html>`))
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/beds", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Provider's own branded 404") {
+		t.Errorf("provider's own HTML 404 page was clobbered: %s", rec.Body.String())
+	}
+}
+
 func TestDiscoveryLinkHeaderPresentOnEveryResponse(t *testing.T) {
 	srv := newTestServer(t)
 

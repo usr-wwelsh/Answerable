@@ -1,8 +1,10 @@
 package endpoint
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -93,7 +95,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/confirm", s.handleConfirm)
 	mux.HandleFunc("/deny", s.handleDeny)
 	mux.Handle("/mcp", s.mcpHandler())
-	return withDiscoveryLinks(mux)
+	return withDiscoveryLinks(withNotFoundHint(mux))
 }
 
 // withDiscoveryLinks adds a Link header advertising the agent-discovery
@@ -110,6 +112,68 @@ func withDiscoveryLinks(next http.Handler) http.Handler {
 		}, ", "))
 		next.ServeHTTP(w, r)
 	})
+}
+
+// withNotFoundHint rewrites any 404 response body into a plain-text
+// pointer to /llms.txt, so an agent that guesses a wrong path — its own
+// route, one the provider's site owns, or one neither owns — still lands
+// on the discovery trailhead by reading the page, not just its headers.
+// It never touches an HTML 404 (Content-Type: text/html): that's the
+// provider's own branded error page, or one the siteproxy layer has
+// already rewritten with the same discovery links inline.
+func withNotFoundHint(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nw := &notFoundHintWriter{ResponseWriter: w}
+		next.ServeHTTP(nw, r)
+		nw.flush()
+	})
+}
+
+type notFoundHintWriter struct {
+	http.ResponseWriter
+	buf         bytes.Buffer
+	status      int
+	buffering   bool
+	wroteHeader bool
+}
+
+func (w *notFoundHintWriter) WriteHeader(status int) {
+	w.status = status
+	w.wroteHeader = true
+	w.buffering = status == http.StatusNotFound && !strings.HasPrefix(w.Header().Get("Content-Type"), "text/html")
+	if !w.buffering {
+		w.ResponseWriter.WriteHeader(status)
+	}
+}
+
+func (w *notFoundHintWriter) Write(p []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	if w.buffering {
+		return w.buf.Write(p)
+	}
+	return w.ResponseWriter.Write(p)
+}
+
+// Unwrap lets http.ResponseController (used by streaming handlers, e.g.
+// MCP's SSE transport, to reach Flush/Hijack) see through this wrapper to
+// the real ResponseWriter — without it, Flush becomes a silent no-op and
+// any streaming response hangs forever waiting for bytes that never leave
+// the buffer.
+func (w *notFoundHintWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func (w *notFoundHintWriter) flush() {
+	if !w.buffering {
+		return
+	}
+	hint := []byte("404 page not found\n\nThis path doesn't exist, but this site publishes agent-readable data at /llms.txt\n")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.Itoa(len(hint)))
+	w.ResponseWriter.WriteHeader(http.StatusNotFound)
+	w.ResponseWriter.Write(hint)
 }
 
 func baseURL(r *http.Request) string {
