@@ -12,6 +12,7 @@ import (
 	"github.com/usr-wwelsh/answerable/internal/booking"
 	"github.com/usr-wwelsh/answerable/internal/email"
 	"github.com/usr-wwelsh/answerable/internal/facts"
+	"github.com/usr-wwelsh/answerable/internal/factshtml"
 	"github.com/usr-wwelsh/answerable/internal/jsonld"
 	"github.com/usr-wwelsh/answerable/internal/llmstxt"
 )
@@ -86,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.HandleFunc("/robots.txt", s.handleRobots)
 	mux.HandleFunc("/facts.jsonld", s.handleFacts)
+	mux.HandleFunc("/facts.html", s.handleFactsHTML)
 	mux.HandleFunc("/.well-known/agent.json", s.handleAgentCard)
 	mux.HandleFunc("/.well-known/mcp.json", s.handleMCPManifest)
 	mux.HandleFunc("/llms.txt", s.handleLLMsTxt)
@@ -109,6 +111,7 @@ func withDiscoveryLinks(next http.Handler) http.Handler {
 			`<` + base + `/.well-known/agent.json>; rel="agent-card"`,
 			`<` + base + `/.well-known/mcp.json>; rel="mcp-manifest"`,
 			`<` + base + `/mcp>; rel="mcp-server"`,
+			`<` + base + `/facts.html>; rel="facts-html"`,
 		}, ", "))
 		next.ServeHTTP(w, r)
 	})
@@ -205,9 +208,19 @@ func (s *Server) handleAgentCard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLLMsTxt(w http.ResponseWriter, r *http.Request) {
-	out := llmstxt.Render(s.currentProvider(), baseURL(r)+"/facts.jsonld", baseURL(r)+"/.well-known/agent.json", baseURL(r)+"/mcp")
+	out := llmstxt.Render(s.currentProvider(), baseURL(r)+"/facts.jsonld", baseURL(r)+"/.well-known/agent.json", baseURL(r)+"/mcp", baseURL(r)+"/facts.html")
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Write([]byte(out))
+}
+
+// handleFactsHTML serves the same provider facts as handleFacts, but as a
+// plain HTML page instead of JSON-LD: a fallback for fetchers that only
+// follow a GET and parse HTML, and can't reach the structured JSON-LD, A2A,
+// or MCP endpoints.
+func (s *Server) handleFactsHTML(w http.ResponseWriter, r *http.Request) {
+	out := factshtml.Render(s.currentProvider(), baseURL(r)+"/book")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(out)
 }
 
 type discoveryIndex struct {
@@ -218,6 +231,7 @@ type discoveryIndex struct {
 	MCPManifest string `json:"mcp_manifest"`
 	MCP         string `json:"mcp"`
 	Facts       string `json:"facts"`
+	FactsHTML   string `json:"facts_html"`
 }
 
 // handleIndex is the first URL any crawler or agent tries. A plain GET
@@ -238,6 +252,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		MCPManifest: base + "/.well-known/mcp.json",
 		MCP:         base + "/mcp",
 		Facts:       base + "/facts.jsonld",
+		FactsHTML:   base + "/facts.html",
 	}
 	out, err := json.MarshalIndent(idx, "", "  ")
 	if err != nil {

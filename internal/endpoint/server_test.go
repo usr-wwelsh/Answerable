@@ -62,6 +62,27 @@ func TestFactsRouteUsesHTTPSWhenForwardedByProxy(t *testing.T) {
 	}
 }
 
+func TestFactsHTMLRouteServesHTML(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/facts.html", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Errorf("Content-Type = %q, want text/html", ct)
+	}
+	if !strings.Contains(rec.Body.String(), "Test Shelter A") {
+		t.Errorf("body missing provider name: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "capacity_available") {
+		t.Errorf("body missing property name: %s", rec.Body.String())
+	}
+}
+
 func TestAgentCardRouteServesJSON(t *testing.T) {
 	srv := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/agent.json", nil)
@@ -127,6 +148,9 @@ func TestLLMsTxtRouteServesPlainText(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "facts.jsonld") {
 		t.Errorf("body missing facts link: %s", rec.Body.String())
 	}
+	if !strings.Contains(rec.Body.String(), "facts.html") {
+		t.Errorf("body missing HTML fallback link: %s", rec.Body.String())
+	}
 }
 
 func TestRootRouteRedirectsToLLMsTxtByDefault(t *testing.T) {
@@ -171,7 +195,7 @@ func TestAgentsRouteServesJSONIndexWhenJSONRequested(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"llms_txt", "agent_card", "mcp_manifest", "\"mcp\"", "facts"} {
+	for _, want := range []string{"llms_txt", "agent_card", "mcp_manifest", "\"mcp\"", "facts", "facts_html"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing %q: %s", want, body)
 		}
@@ -193,7 +217,7 @@ func TestRootRouteServesJSONIndexWhenJSONRequested(t *testing.T) {
 		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"llms_txt", "agent_card", "mcp_manifest", "\"mcp\"", "facts"} {
+	for _, want := range []string{"llms_txt", "agent_card", "mcp_manifest", "\"mcp\"", "facts", "facts_html"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing %q: %s", want, body)
 		}
@@ -311,7 +335,7 @@ func TestDiscoveryLinkHeaderPresentOnEveryResponse(t *testing.T) {
 		srv.Handler().ServeHTTP(rec, req)
 
 		link := rec.Header().Get("Link")
-		for _, want := range []string{`rel="llms-txt"`, `rel="agent-card"`, `rel="mcp-manifest"`, `rel="mcp-server"`} {
+		for _, want := range []string{`rel="llms-txt"`, `rel="agent-card"`, `rel="mcp-manifest"`, `rel="mcp-server"`, `rel="facts-html"`} {
 			if !strings.Contains(link, want) {
 				t.Errorf("path %s: Link header missing %s: %s", path, want, link)
 			}
