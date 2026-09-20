@@ -7,7 +7,10 @@
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <p class="banner">This is a hackathon demo site for a fictional shelter. If you need help tonight, call 211 or your local emergency shelter hotline.</p>
+  <p class="banner">This is a hackathon demo for a fictional shelter, not a real one. If
+    you need shelter tonight, contact the City of Detroit's
+    <a href="https://detroitmi.gov/departments/housing-and-revitalization-department/homelessness">Homelessness
+    Services</a> page or your local emergency shelter hotline.</p>
 
   <header>
     <h1>Harbor House Shelter</h1>
@@ -15,32 +18,44 @@
   </header>
 
   <main>
-    <section>
+    <div class="card highlight">
       <h2>Tonight</h2>
       <p>We take walk-ins starting at 7pm. No referral needed. If you're bringing family or pets, call ahead so we can plan for you.</p>
-    </section>
+    </div>
 
-    <section>
-      <h2>Who we serve</h2>
-      <p>Adults and families, no ID required. We do not turn anyone away for lack of documentation.</p>
-    </section>
+    <div class="grid">
+      <div class="card">
+        <h2>Who we serve</h2>
+        <p>Adults and families, no ID required. We do not turn anyone away for lack of documentation.</p>
+      </div>
 
-    <section>
-      <h2>Hours</h2>
-      <p>Intake: 7pm &ndash; 9pm nightly. Beds held until 10pm for late arrivals who call ahead.</p>
-    </section>
+      <div class="card">
+        <h2>Hours</h2>
+        <p>Intake: 7pm&ndash;9pm nightly. Beds held until 10pm for late arrivals who call ahead.</p>
+      </div>
+    </div>
 
-    <section>
+    <div class="card">
       <h2>Contact</h2>
       <p>123 Example St, Detroit, MI 48201<br>
       (313) 555-0100<br>
       This is a demo phone number and does not connect anywhere.</p>
-    </section>
+    </div>
+
+    <div class="note">
+      <h2>Why this demo exists</h2>
+      <p>The Detroit resources page linked above blocks bots and crawlers outright &mdash;
+      try fetching it with anything other than a browser and see for yourself. That's not
+      a knock on the city; it's the exact problem this project exists to fix: real,
+      current civic information that only a human clicking through a page can reach.
+      Harbor House is a stand-in for any provider &mdash; a shelter, a pantry, a clinic
+      &mdash; whose hours and availability should be just as reachable to someone's AI
+      agent as to someone's browser.</p>
+    </div>
   </main>
 
   <footer>
-    <p>Harbor House Shelter is a fictional demo built for a hackathon. Real-time bed availability for this demo is published at
-      <a href="/llms.txt">/llms.txt</a> for AI assistants and agents.</p>
+    <p>Harbor House Shelter is a fictional demo built for the Venture 313 Buildathon.</p>
   </footer>
 </body>
 </html>
