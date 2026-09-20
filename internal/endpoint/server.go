@@ -221,7 +221,7 @@ func (s *Server) handleAgentCard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLLMsTxt(w http.ResponseWriter, r *http.Request) {
-	out := llmstxt.Render(s.currentProvider(), baseURL(r)+"/facts.jsonld", baseURL(r)+"/.well-known/agent.json", baseURL(r)+"/mcp", baseURL(r)+"/facts.html")
+	out := llmstxt.Render(s.currentProvider(), baseURL(r)+"/facts.jsonld", baseURL(r)+"/.well-known/agent.json", baseURL(r)+"/.well-known/mcp.json", baseURL(r)+"/mcp", baseURL(r)+"/facts.html")
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Write([]byte(out))
 }
