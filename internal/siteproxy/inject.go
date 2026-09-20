@@ -31,17 +31,20 @@ var headOpenTag = regexp.MustCompile(`(?i)<head[^>]*>`)
 var bodyCloseTag = regexp.MustCompile(`(?i)</body\s*>`)
 
 // InjectLinks inserts a <link> tag for each discovery link immediately
-// after the page's opening <head> tag, and a small visible <a> link to
-// llms.txt immediately before the closing </body> tag. The <head> links
-// are the machine-readable signal; the visible link matters because most
-// LLM browsing tools extract only a page's readable text and body links,
-// not <head> metadata, so a crawler that never inspects <head> still has
-// something to click. It leaves body untouched if the relevant tag isn't
-// found, so a non-HTML or malformed body passes through rather than
-// getting corrupted.
+// after the page's opening <head> tag, and an <a> link to llms.txt
+// immediately before the closing </body> tag. The <head> links are the
+// machine-readable signal; the body link matters because most LLM
+// browsing tools extract only a page's readable text and body links, not
+// <head> metadata, so a crawler that never inspects <head> still has
+// something to click. It's visually hidden (clipped off-screen, not
+// display:none) so a human reading the rendered page in a normal browser
+// never sees it, while text-extraction tools and screen readers — which
+// don't apply CSS the way a rendering browser does — still find it. It
+// leaves body untouched if the relevant tag isn't found, so a non-HTML or
+// malformed body passes through rather than getting corrupted.
 func InjectLinks(body []byte, links []DiscoveryLink) []byte {
 	body = injectHeadLinks(body, links)
-	body = injectVisibleFooterLink(body, links)
+	body = injectHiddenFooterLink(body, links)
 	return body
 }
 
@@ -63,7 +66,7 @@ func injectHeadLinks(body []byte, links []DiscoveryLink) []byte {
 	return out
 }
 
-func injectVisibleFooterLink(body []byte, links []DiscoveryLink) []byte {
+func injectHiddenFooterLink(body []byte, links []DiscoveryLink) []byte {
 	loc := bodyCloseTag.FindIndex(body)
 	if loc == nil {
 		return body
@@ -80,7 +83,7 @@ func injectVisibleFooterLink(body []byte, links []DiscoveryLink) []byte {
 		return body
 	}
 
-	footer := fmt.Sprintf(`<p style="font-size:0.75em;opacity:0.6"><a href="%s">Agent/API data</a></p>`, href)
+	footer := fmt.Sprintf(`<p style="position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"><a href="%s">Agent/API data</a></p>`, href)
 
 	out := make([]byte, 0, len(body)+len(footer))
 	out = append(out, body[:loc[0]]...)

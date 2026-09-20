@@ -25,17 +25,20 @@ func TestInjectLinksHandlesHeadWithAttributes(t *testing.T) {
 	}
 }
 
-func TestInjectLinksAddsVisibleFooterLinkBeforeBodyClose(t *testing.T) {
+func TestInjectLinksAddsHiddenFooterLinkBeforeBodyClose(t *testing.T) {
 	body := []byte("<html><head><title>x</title></head><body><p>hi</p></body></html>")
 	out := string(InjectLinks(body, DefaultLinks))
 
 	bodyCloseIdx := strings.Index(out, "</body>")
 	linkIdx := strings.Index(out, `<a href="/llms.txt">`)
 	if linkIdx == -1 {
-		t.Fatalf("no visible <a> link to /llms.txt in body: %s", out)
+		t.Fatalf("no <a> link to /llms.txt in body: %s", out)
 	}
 	if linkIdx > bodyCloseIdx {
-		t.Errorf("visible link inserted after </body>: %s", out)
+		t.Errorf("footer link inserted after </body>: %s", out)
+	}
+	if !strings.Contains(out, "clip:rect(0,0,0,0)") {
+		t.Errorf("footer link is not visually hidden from sighted browsers: %s", out)
 	}
 }
 
@@ -44,7 +47,7 @@ func TestInjectLinksLeavesBodyWithoutBodyCloseUntouched(t *testing.T) {
 	out := string(InjectLinks(body, DefaultLinks))
 
 	if strings.Contains(out, "<a href=") {
-		t.Errorf("visible link injected with no </body> to anchor to: %s", out)
+		t.Errorf("footer link injected with no </body> to anchor to: %s", out)
 	}
 }
 
