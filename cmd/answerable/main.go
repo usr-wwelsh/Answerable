@@ -31,6 +31,8 @@ func main() {
 	noBrowser := flag.Bool("no-browser", false, "don't open the admin webui in a browser on startup")
 	siteDir := flag.String("site-dir", "", "serve the provider's site from this directory, injecting agent-discovery <link> tags into every HTML page (mutually exclusive with -upstream)")
 	upstream := flag.String("upstream", "", "reverse-proxy to the provider's existing site at this URL, injecting agent-discovery <link> tags into every HTML response (mutually exclusive with -site-dir)")
+	rateLimitRPS := flag.Float64("rate-limit-rps", 15, "public endpoint: sustained requests/sec allowed per client IP (0 disables limiting)")
+	rateLimitBurst := flag.Int("rate-limit-burst", 120, "public endpoint: burst of requests allowed per client IP before the sustained rate applies")
 	flag.Parse()
 
 	if *siteDir != "" && *upstream != "" {
@@ -52,6 +54,7 @@ func main() {
 	seedIfUnconfigured(cfgStore, *file, *webhookURL)
 
 	srv := endpoint.New(facts.Provider{}, bookStore, "")
+	srv.SetRateLimit(*rateLimitRPS, *rateLimitBurst)
 
 	switch {
 	case *siteDir != "":

@@ -18,16 +18,29 @@ import (
 )
 
 type Server struct {
-	mu         sync.RWMutex
-	provider   facts.Provider
-	store      *booking.Store
-	webhookURL string
-	emailCfg   email.Config
-	site       http.Handler
+	mu          sync.RWMutex
+	provider    facts.Provider
+	store       *booking.Store
+	webhookURL  string
+	emailCfg    email.Config
+	site        http.Handler
+	rateLimiter *ipRateLimiter
 }
 
 func New(p facts.Provider, store *booking.Store, webhookURL string) *Server {
-	return &Server{provider: p, store: store, webhookURL: webhookURL}
+	return &Server{
+		provider:    p,
+		store:       store,
+		webhookURL:  webhookURL,
+		rateLimiter: newIPRateLimiter(defaultRateLimitRPS, defaultRateLimitBurst, rateLimitVisitorTTL),
+	}
+}
+
+// SetRateLimit overrides the per-IP request rate (requests/sec) and burst
+// size. Call it before serving; it isn't safe to change concurrently with
+// live traffic.
+func (s *Server) SetRateLimit(rps float64, burst int) {
+	s.rateLimiter = newIPRateLimiter(rps, burst, rateLimitVisitorTTL)
 }
 
 // SetSite installs the handler for the provider's own site — everything
@@ -97,7 +110,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/confirm", s.handleConfirm)
 	mux.HandleFunc("/deny", s.handleDeny)
 	mux.Handle("/mcp", s.mcpHandler())
-	return withDiscoveryLinks(withNotFoundHint(mux))
+	return s.rateLimiter.middleware(withDiscoveryLinks(withNotFoundHint(mux)))
 }
 
 // withDiscoveryLinks adds a Link header advertising the agent-discovery
